@@ -12,15 +12,24 @@ android {
         applicationId = "co.obra.controlconcreto"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.2"
+    }
+
+    // Firma fija: permite instalar actualizaciones encima sin desinstalar (no borrar condor.jks)
+    signingConfigs {
+        create("condor") {
+            storeFile = file("condor.jks")
+            storePassword = "condor2026"
+            keyAlias = "condor"
+            keyPassword = "condor2026"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Firmado con la llave de depuración para poder instalarlo directo en el teléfono
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("condor")
         }
     }
     compileOptions {

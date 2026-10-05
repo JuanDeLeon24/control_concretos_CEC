@@ -16,6 +16,7 @@ import java.io.FileOutputStream
 import java.text.Normalizer
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.min
 
 /** Genera la planilla PS-TUNEL 011 en PDF (carta horizontal) sin conexión. */
 object Pdf {
@@ -161,18 +162,7 @@ object Pdf {
         y += 18f + 14f
 
         // ---------- Resumen y firmas ----------
-        val datos = listOf(
-            "Volumen total vaciado" to "${T.fmt(r.vol, 2)} m³",
-            "Mixers recibidos" to r.n.toString(),
-            "Primera llegada / último fin de descargue" to "${r.primera.ifBlank { "–" }} / ${r.ultimo.ifBlank { "–" }}",
-            "Duración total del vaciado" to T.dur(r.duracion?.toDouble()),
-            "Espera promedio (llegada a inicio)" to T.dur(r.espera),
-            "Descargue promedio por mixer" to T.dur(r.descargue),
-            "Asentamiento en obra (prom. / rango)" to
-                "${if (r.sProm != null) T.fmt(r.sProm) + "\"" else "–"}  (${T.rango(r.sMin, r.sMax, "\"")})",
-            "Temperatura (prom. / rango)" to
-                "${if (r.tProm != null) T.fmt(r.tProm) + " °C" else "–"}  (${T.rango(r.tMin, r.tMax, " °C")})"
-        )
+        val datos = filasResumen(r)
         val hRes = 16f + datos.size * 15f
         if (y + hRes > limite) { c = nueva(); y = M }
         celda(c, M, y, 360f, 16f, "Resumen de la jornada", tp(8.5f, true, Color.WHITE), NORMAL, AZUL)
@@ -191,6 +181,30 @@ object Pdf {
         val pf = tp(8f)
         c.drawText("Elaboró" + if (j.nombre.isNotBlank()) ": ${j.nombre}" else "", sx, sy + 12f, pf)
         c.drawText("Revisó / Vo. Bo.", sx + sw + 36f, sy + 12f, pf)
+
+        // ---------- Anexo: fotos de las remisiones (2 por página) ----------
+        val conFoto = j.mixers.mapIndexedNotNull { i, m -> if (Fotos.existe(ctx, m.id)) (i + 1) to m else null }
+        conFoto.chunked(2).forEach { par ->
+            c = nueva()
+            c.drawText("ANEXO – REMISIONES DE PLANTA", M, M + 12f, tp(12f, true, AZUL))
+            c.drawText("Jornada ${T.fechaCorta(j.fecha)}, turno ${j.turno.lowercase()}" +
+                (if (j.tramo.isNotBlank()) ", tramo ${j.tramo}" else ""), M, M + 26f, tp(8.5f, color = LINEA))
+            val anchoFoto = (ancho - 16f) / 2f
+            val arriba = M + 38f
+            val altoFoto = PH - M - 16f - arriba - 16f
+            par.forEachIndexed { k, (num, m) ->
+                val b = Fotos.cargar(ctx, m.id, 1400) ?: return@forEachIndexed
+                val x0 = M + k * (anchoFoto + 16f)
+                val esc = min(anchoFoto / b.width, altoFoto / b.height)
+                val w = b.width * esc; val h = b.height * esc
+                val left = x0 + (anchoFoto - w) / 2f
+                c.drawBitmap(b, null, RectF(left, arriba, left + w, arriba + h), Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+                c.drawRect(left, arriba, left + w, arriba + h, borde)
+                val pie = "Mixer $num  |  ${m.codigo}" + (if (m.llegada.isNotBlank()) "  |  llegada ${m.llegada}" else "")
+                c.drawText(pie, left, arriba + h + 12f, tp(8.5f, true, AZUL))
+                b.recycle()
+            }
+        }
 
         pagina?.let { doc.finishPage(it) }
 

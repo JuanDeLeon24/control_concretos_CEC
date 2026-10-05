@@ -8,8 +8,7 @@ data class Jornada(
     val frente: String,
     val tramo: String,
     val creada: String,
-    val mixers: List<Mixer> = emptyList(),
-    val origen: String = Excel.ORIGEN_LOCAL
+    val mixers: List<Mixer> = emptyList()
 )
 
 data class Mixer(
@@ -47,7 +46,7 @@ fun resumen(j: Jornada): Resumen {
     val esp = m.mapNotNull { T.diff(it.llegada, it.inicio) }
     val des = m.mapNotNull { T.diff(it.inicio, it.fin) }
     val temps = m.mapNotNull { T.num(it.temp) }
-    val slump = m.mapNotNull { T.num(it.asObra) }
+    val slump = m.mapNotNull { T.pulgadas(it.asObra) }
     val primera = m.firstOrNull { it.llegada.isNotBlank() }
     val ultima = m.lastOrNull { it.fin.isNotBlank() }
     return Resumen(
@@ -62,3 +61,17 @@ fun resumen(j: Jornada): Resumen {
         duracion = if (primera != null && ultima != null) T.diff(primera.llegada, ultima.fin) else null
     )
 }
+
+/** Filas del resumen de la jornada (las usan el PDF y el Excel). */
+fun filasResumen(r: Resumen): List<Pair<String, String>> = listOf(
+    "Volumen total vaciado" to "${T.fmt(r.vol, 2)} m³",
+    "Mixers recibidos" to r.n.toString(),
+    "Primera llegada / último fin de descargue" to "${r.primera.ifBlank { "–" }} / ${r.ultimo.ifBlank { "–" }}",
+    "Duración total del vaciado" to T.dur(r.duracion?.toDouble()),
+    "Espera promedio (llegada a inicio)" to T.dur(r.espera),
+    "Descargue promedio por mixer" to T.dur(r.descargue),
+    "Asentamiento en obra (prom. / rango)" to
+        "${if (r.sProm != null) T.fraccion(r.sProm) + "\"" else "–"}  (${T.rangoPulg(r.sMin, r.sMax)})",
+    "Temperatura (prom. / rango)" to
+        "${if (r.tProm != null) T.fmt(r.tProm) + " °C" else "–"}  (${T.rango(r.tMin, r.tMax, " °C")})"
+)

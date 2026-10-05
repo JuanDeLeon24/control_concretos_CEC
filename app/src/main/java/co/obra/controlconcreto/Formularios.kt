@@ -9,6 +9,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -142,6 +143,43 @@ private fun CampoNumero(label: String, valor: String, onCambio: (String) -> Unit
     )
 }
 
+/** Asentamiento en pulgadas: número entero + botones de fracción (7 1/4, 6 1/2…). */
+@Composable
+private fun CampoAsentamiento(label: String, valor: String, onCambio: (String) -> Unit) {
+    val entero = valor.trim().split(" ", "-").firstOrNull()?.takeIf { p -> p.all { it.isDigit() } } ?: ""
+    val fracActual = valor.trim().substringAfter(" ", "").trim()
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        OutlinedTextField(
+            value = valor, onValueChange = onCambio, label = { Text(label) }, singleLine = true,
+            supportingText = { Text("Escribe el número entero y toca la fracción. Ej: 7 1/4") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("0", "1/8", "1/4", "3/8", "1/2", "5/8", "3/4", "7/8").forEach { f ->
+                val sel = if (f == "0") valor.isNotBlank() && fracActual.isEmpty() else fracActual == f
+                val texto = if (f == "0") "Exacto" else f
+                if (sel) Button(
+                    onClick = {}, colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro),
+                    contentPadding = PaddingValues(horizontal = 12.dp), modifier = Modifier.height(40.dp)
+                ) { Text(texto) }
+                else OutlinedButton(
+                    onClick = {
+                        onCambio(
+                            when {
+                                f == "0" -> entero
+                                entero.isEmpty() -> f
+                                else -> "$entero $f"
+                            }
+                        )
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp), modifier = Modifier.height(40.dp)
+                ) { Text(texto, color = AzulOscuro) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BotonPrincipal(texto: String, onClick: () -> Unit) {
     Button(
@@ -250,18 +288,6 @@ fun FormMixer(
     var errCodigo by remember { mutableStateOf(false) }
     var errNumero by remember { mutableStateOf<String?>(null) }
 
-    fun agregarFraccion(valor: String, setter: (String) -> Unit, actual: String) {
-        val base = actual.trim()
-        setter(
-            when {
-                base.isBlank() -> valor
-                base.matches(Regex("""[-+]?\d+(?:[.,]\d+)?""")) -> "$base $valor"
-                else -> "$base$valor"
-            }
-        )
-        errNumero = null
-    }
-
     val numero = if (m == null) j.mixers.size + 1 else j.mixers.indexOfFirst { it.id == m.id } + 1
 
     val avisos = buildList {
@@ -271,15 +297,18 @@ fun FormMixer(
     }
 
     fun guardar() {
-        val malo = listOf("Cantidad" to cant, "Temperatura" to temp, "Asentamiento en planta" to asP, "Asentamiento en obra" to asO)
+        val malo = listOf("Cantidad" to cant, "Temperatura" to temp)
             .firstOrNull { it.second.isNotBlank() && T.num(it.second) == null }
+        val maloAs = listOf("Asentamiento en planta" to asP, "Asentamiento en obra" to asO)
+            .firstOrNull { it.second.isNotBlank() && T.pulgadas(it.second) == null }
         if (codigo.isBlank()) { errCodigo = true; return }
         if (malo != null) { errNumero = "${malo.first} debe ser un número"; return }
+        if (maloAs != null) { errNumero = "${maloAs.first}: escríbelo como 7, 7 1/4 o 7.25"; return }
         onGuardar(
             Mixer(
                 id = m?.id ?: T.uid(), jornadaId = j.id, orden = m?.orden ?: 0,
                 codigo = codigo.trim(), llegada = llegada, inicio = inicio, fin = fin,
-                cant = T.limpiar(cant), asPlanta = T.limpiar(asP), asObra = T.limpiar(asO), temp = T.limpiar(temp),
+                cant = T.limpiar(cant), asPlanta = T.normalizarPulg(asP), asObra = T.normalizarPulg(asO), temp = T.limpiar(temp),
                 loc = loc.trim(), obs = obs.trim()
             )
         )
@@ -312,35 +341,8 @@ fun FormMixer(
             CampoNumero("Cantidad (m³)", cant, { cant = it; errNumero = null }, Modifier.weight(1f))
             CampoNumero("Temperatura (°C)", temp, { temp = it; errNumero = null }, Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f)) {
-                CampoNumero("Asent. planta (\")", asP, { asP = it; errNumero = null }, Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
-                    listOf("1/4", "1/2", "3/4").forEach { fr ->
-                        SuggestionChip(
-                            onClick = { agregarFraccion(fr, { asP = it }, asP) },
-                            label = { Text(fr, fontSize = 11.sp) }
-                        )
-                    }
-                }
-            }
-            Column(Modifier.weight(1f)) {
-                CampoNumero("Asent. obra (\")", asO, { asO = it; errNumero = null }, Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
-                    listOf("1/4", "1/2", "3/4").forEach { fr ->
-                        SuggestionChip(
-                            onClick = { agregarFraccion(fr, { asO = it }, asO) },
-                            label = { Text(fr, fontSize = 11.sp) }
-                        )
-                    }
-                }
-            }
-        }
-        Text(
-            "Puedes escribir el entero y luego tocar una fracción. Ej.: 3 + 1/4 → 3 1/4.",
-            fontSize = 11.sp, color = AzulMedio,
-            modifier = Modifier.padding(top = 4.dp)
-        )
+        CampoAsentamiento("Asentamiento en planta (\")", asP) { asP = it; errNumero = null }
+        CampoAsentamiento("Asentamiento en obra (\")", asO) { asO = it; errNumero = null }
         errNumero?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
 
         Seccion("Ubicación")

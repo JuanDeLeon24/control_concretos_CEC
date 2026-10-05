@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <files-path name="pdf" path="pdf/" />
-    <files-path name="excel" path="excel/" />
+    <files-path name="exportes" path="exportes/" />
+    <files-path name="remisiones" path="remisiones/" />
+    <cache-path name="camara" path="camara/" />
 </paths>

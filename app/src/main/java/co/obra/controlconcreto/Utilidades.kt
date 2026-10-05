@@ -43,33 +43,7 @@ object T {
         return (m / 60) to (m % 60)
     }
 
-    /** Convierte números decimales y fracciones simples/mixed (ej. 1/4, 3 1/2) a Double. */
-    fun num(s: String): Double? {
-        val t = s.trim().replace(',', '.')
-        if (t.isBlank()) return null
-        t.toDoubleOrNull()?.let { return it }
-
-        val partes = t.split(Regex("\\s+"))
-        var total = 0.0
-        var encontro = false
-        for (parte in partes) {
-            if (!parte.contains("/")) {
-                val entero = parte.toDoubleOrNull() ?: return null
-                total += entero
-                encontro = true
-            } else {
-                val f = parte.split("/")
-                if (f.size != 2) return null
-                val n = f[0].toDoubleOrNull() ?: return null
-                val d = f[1].toDoubleOrNull() ?: return null
-                if (d == 0.0) return null
-                total += n / d
-                encontro = true
-            }
-        }
-        return if (encontro) total else null
-    }
-
+    fun num(s: String): Double? = s.trim().replace(',', '.').toDoubleOrNull()
     fun limpiar(s: String): String = s.trim().replace(',', '.')
 
     fun fmt(d: Double?, dec: Int = 1): String {
@@ -93,9 +67,60 @@ object T {
         else -> "${fmt(a)} a ${fmt(b)}$u"
     }
 
+    // ---------- Asentamiento en pulgadas con fracciones ----------
+    private val FRAC_UNICODE = mapOf(
+        '¼' to " 1/4", '½' to " 1/2", '¾' to " 3/4", '⅛' to " 1/8", '⅜' to " 3/8", '⅝' to " 5/8", '⅞' to " 7/8"
+    )
+
+    /** Acepta 7 | 7.25 | 7,25 | 7 1/4 | 7-1/4 | 7¼ | 1/2 y devuelve el valor en pulgadas. */
+    fun pulgadas(s: String): Double? {
+        var t = s.trim().replace(',', '.').replace("\"", "").replace("”", "").replace("''", "")
+        FRAC_UNICODE.forEach { (k, v) -> t = t.replace(k.toString(), v) }
+        t = t.replace('-', ' ').replace(Regex("\\s+"), " ").trim()
+        if (t.isEmpty()) return null
+        Regex("^\\d+(\\.\\d+)?$").find(t)?.let { return t.toDouble() }
+        val m = Regex("^(?:(\\d+) )?(\\d+)/(\\d+)$").find(t) ?: return null
+        val ent = m.groupValues[1].ifEmpty { "0" }.toDouble()
+        val num = m.groupValues[2].toDouble()
+        val den = m.groupValues[3].toDouble()
+        if (den == 0.0) return null
+        return ent + num / den
+    }
+
+    fun esOctavo(d: Double): Boolean = Math.abs(d * 8 - Math.round(d * 8)) < 1e-9
+
+    /** 7.25 -> "7 1/4" (redondea al octavo de pulgada). */
+    fun fraccion(d: Double?): String {
+        if (d == null) return ""
+        val oct = Math.round(d * 8).toInt()
+        val ent = oct / 8
+        var n = oct % 8
+        var den = 8
+        while (n != 0 && n % 2 == 0) { n /= 2; den /= 2 }
+        return when {
+            n == 0 -> "$ent"
+            ent == 0 -> "$n/$den"
+            else -> "$ent $n/$den"
+        }
+    }
+
+    /** Deja el asentamiento escrito de forma uniforme: "7-1/4", "7.25", "7¼" -> "7 1/4". */
+    fun normalizarPulg(s: String): String {
+        val d = pulgadas(s) ?: return s.trim()
+        return if (esOctavo(d)) fraccion(d) else limpiar(s)
+    }
+
+    fun rangoPulg(a: Double?, b: Double?): String = when {
+        a == null || b == null -> "–"
+        a == b -> fraccion(a) + "\""
+        else -> "${fraccion(a)} a ${fraccion(b)}\""
+    }
+
     fun volumen(j: Jornada): Double = j.mixers.sumOf { num(it.cant) ?: 0.0 }
 
     private fun fecha(iso: String): LocalDate? = runCatching { LocalDate.parse(iso) }.getOrNull()
+
+    fun serialExcel(iso: String): Double? = fecha(iso)?.let { it.toEpochDay() + 25569.0 }
 
     fun fechaCorta(iso: String): String =
         fecha(iso)?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: iso
@@ -164,7 +189,7 @@ object Respaldo {
             arr.put(
                 JSONObject().put("id", j.id).put("fecha", j.fecha).put("turno", j.turno)
                     .put("nombre", j.nombre).put("frente", j.frente).put("tramo", j.tramo)
-                    .put("creada", j.creada).put("origen", j.origen).put("mixers", mx)
+                    .put("creada", j.creada).put("mixers", mx)
             )
         }
         return JSONObject().put("app", "control-concreto").put("version", 1).put("jornadas", arr).toString(1)
@@ -182,7 +207,6 @@ object Respaldo {
                 id = id, fecha = o.getString("fecha"), turno = o.txt("turno").ifBlank { "Día" },
                 nombre = o.txt("nombre"), frente = o.txt("frente"), tramo = o.txt("tramo"),
                 creada = o.txt("creada"),
-                origen = o.txt("origen").ifBlank { Excel.ORIGEN_LOCAL },
                 mixers = (0 until mx.length()).map { k ->
                     val m = mx.getJSONObject(k)
                     Mixer(

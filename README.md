@@ -32,6 +32,20 @@ Solo se necesita internet para compilar (una vez). Después, el teléfono no lo 
   Luego puedes abrirlo, compartirlo (WhatsApp, correo) o guardarlo en el teléfono.
 - El historial queda **agrupado por día de vaciado**.
 
+## Fotos de las remisiones
+En cada mixer hay un cuadro con una cámara. Tómale la foto a la remisión de planta, ajusta las
+cuatro esquinas (con lupa) y al guardar se endereza y se le aplica un filtro de escaneo automático.
+Ya tomada, el cuadro muestra la miniatura; tócalo para verla, cambiarla, compartirla o borrarla.
+Las fotos salen como anexo al final del PDF de la jornada. Todo funciona sin internet.
+
+## Exportar a Excel
+"Exportar" en la jornada ofrece PDF o Excel. En el menú ⋮ está "Exportar historial a Excel"
+(todos los mixers + resumen por jornada, con filtros).
+
+## Actualizaciones
+Desde la versión 1.2 la app se firma con `app/condor.jks`. No borres ese archivo: con él, cada
+versión nueva se instala encima de la anterior sin perder datos.
+
 ## Logo
 Menú ⋮ > "Agregar logo de la empresa" y eliges la imagen del logo oficial (PNG). Queda guardado
 y sale en la app y en el encabezado del PDF. También puedes poner `logo.png` en
@@ -41,12 +55,3 @@ y sale en la app y en el encabezado del PDF. También puedes poner `logo.png` en
 Los datos viven en el teléfono. Haz de vez en cuando: menú ⋮ > "Guardar copia de seguridad"
 (archivo .json) y guárdalo en otro lado. Para recuperarlos: "Restaurar copia de seguridad".
 Si desinstalas la app sin copia, los datos se pierden.
-
-## Importación y orígenes de Excel
-
-La app permite importar datos desde una carpeta del teléfono. El nombre de la carpeta se usa como origen de los registros importados (por ejemplo, `Aux. Omar Gelves`). Todos los `.xlsx` que estén directamente dentro de esa carpeta se leen y se consolidan.
-
-Desde **Exportar a Excel** se puede elegir:
-- **Mis datos**: solo jornadas creadas en este teléfono.
-- **Auxiliar**: solo registros importados con ese origen.
-- **Registro unificado — Todos**: combina los datos propios y todos los auxiliares.

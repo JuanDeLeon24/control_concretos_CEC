@@ -50,49 +50,29 @@ class MainActivity : ComponentActivity() {
 
 data class FormJ(val jornada: Jornada?)
 data class FormM(val jornada: Jornada, val mixer: Mixer?)
+data class Exportado(val archivo: File, val mime: String, val tipo: String)
+const val MIME_PDF = "application/pdf"
+const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 data class Confirmacion(val titulo: String, val texto: String, val accion: String, val alConfirmar: () -> Unit)
 
 private fun uriDe(ctx: Context, f: File) = FileProvider.getUriForFile(ctx, ctx.packageName + ".archivos", f)
 
-private fun compartirPdf(ctx: Context, f: File) {
+private fun compartir(ctx: Context, f: File, mime: String) {
     val i = Intent(Intent.ACTION_SEND)
-        .setType("application/pdf")
+        .setType(mime)
         .putExtra(Intent.EXTRA_STREAM, uriDe(ctx, f))
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    ctx.startActivity(Intent.createChooser(i, "Compartir PDF"))
+    ctx.startActivity(Intent.createChooser(i, "Compartir archivo"))
 }
 
-private fun abrirPdf(ctx: Context, f: File): Boolean = try {
+private fun abrir(ctx: Context, f: File, mime: String): Boolean = try {
     ctx.startActivity(
-        Intent(Intent.ACTION_VIEW).setDataAndType(uriDe(ctx, f), "application/pdf")
+        Intent(Intent.ACTION_VIEW).setDataAndType(uriDe(ctx, f), mime)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     )
     true
 } catch (e: ActivityNotFoundException) { false }
-
-private fun compartirExcel(ctx: Context, f: File) {
-    val i = Intent(Intent.ACTION_SEND)
-        .setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        .putExtra(Intent.EXTRA_STREAM, uriDe(ctx, f))
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    ctx.startActivity(Intent.createChooser(i, "Compartir Excel"))
-}
-
-private fun nombreCarpeta(ctx: Context, uri: android.net.Uri): String = runCatching {
-    ctx.contentResolver.query(uri, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use {
-        if (it.moveToFirst()) it.getString(0).orEmpty() else ""
-    } ?: ""
-}.getOrDefault("")
-
-private fun exportarExcelOrigen(
-    ctx: Context, scope: kotlinx.coroutines.CoroutineScope, jornadas: List<Jornada>, origen: String,
-    onListo: (File) -> Unit, onError: () -> Unit
-) {
-    scope.launch {
-        val r = runCatching { withContext(Dispatchers.IO) { Excel.generarOrigen(ctx, jornadas, origen) } }
-        r.onSuccess(onListo).onFailure { onError() }
-    }
-}
 
 @Composable
 fun App(db: Db) {
@@ -111,10 +91,39 @@ fun App(db: Db) {
     var formJ by remember { mutableStateOf<FormJ?>(null) }
     var formM by remember { mutableStateOf<FormM?>(null) }
     var confirm by remember { mutableStateOf<Confirmacion?>(null) }
-    var pdf by remember { mutableStateOf<File?>(null) }
-    var excel by remember { mutableStateOf<File?>(null) }
+    var exportado by remember { mutableStateOf<Exportado?>(null) }
+    var elegirFormato by remember { mutableStateOf<Jornada?>(null) }
     var generando by remember { mutableStateOf(false) }
-    var elegirOrigenExcel by remember { mutableStateOf(false) }
+    var versionFotos by remember { mutableIntStateOf(0) }
+    var capturaId by rememberSaveable { mutableStateOf<String?>(null) }
+    var recorte by remember { mutableStateOf<Pair<String, android.graphics.Bitmap>?>(null) }
+    var procesando by remember { mutableStateOf(false) }
+    var verFotoId by remember { mutableStateOf<String?>(null) }
+
+    val tomarFoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val id = capturaId
+        if (ok && id != null) scope.launch {
+            val b = withContext(Dispatchers.IO) { runCatching { Fotos.cargarCaptura(ctx) }.getOrNull() }
+            if (b != null) recorte = id to b else aviso("No se pudo leer la foto")
+        }
+    }
+    val desdeGaleria = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val id = capturaId
+        if (uri != null && id != null) scope.launch {
+            val b = withContext(Dispatchers.IO) { runCatching { Fotos.cargarUri(ctx, uri) }.getOrNull() }
+            if (b != null) recorte = id to b else aviso("No se pudo leer esa imagen")
+        }
+    }
+    fun abrirCamara(id: String) {
+        capturaId = id; verFotoId = null
+        val f = Fotos.captura(ctx); f.delete()
+        try { tomarFoto.launch(uriDe(ctx, f)) }
+        catch (e: ActivityNotFoundException) { aviso("No se encontró una app de cámara") }
+    }
+    fun abrirGaleria(id: String) {
+        capturaId = id; verFotoId = null
+        desdeGaleria.launch("image/*")
+    }
 
     val elegirLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -141,43 +150,25 @@ fun App(db: Db) {
                 .onFailure { aviso("Ese archivo no es una copia válida de esta app") }
         }
     }
-    val guardarPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
-        val f = pdf
-        if (uri != null && f != null) {
+    fun copiarA(uri: android.net.Uri?) {
+        val e = exportado
+        if (uri != null && e != null) {
             runCatching {
-                ctx.contentResolver.openOutputStream(uri)!!.use { out -> f.inputStream().use { it.copyTo(out) } }
-            }.onSuccess { aviso("PDF guardado") }
-                .onFailure { aviso("No se pudo guardar el PDF") }
+                ctx.contentResolver.openOutputStream(uri)!!.use { out -> e.archivo.inputStream().use { it.copyTo(out) } }
+            }.onSuccess { aviso("${e.tipo} guardado") }
+                .onFailure { aviso("No se pudo guardar el archivo") }
         }
     }
+    val guardarPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(MIME_PDF)) { copiarA(it) }
+    val guardarXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(MIME_XLSX)) { copiarA(it) }
 
-    val importarExcel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val r = runCatching {
-                    withContext(Dispatchers.IO) {
-                        val origen = nombreCarpeta(ctx, uri).ifBlank { "Importado" }
-                        Excel.importarCarpeta(ctx, uri, origen).also { db.importar(it) }
-                    }
-                }
-                r.onSuccess { lista ->
-                    version++
-                    val mixers = lista.sumOf { it.mixers.size }
-                    aviso("Importadas ${lista.size} jornadas y $mixers mixers como '${lista.firstOrNull()?.origen ?: "Importado"}'")
-                }.onFailure { aviso("No se pudo importar el Excel: ${it.message ?: "archivo no válido"}") }
-            }
-        }
-    }
-
-    val guardarExcel = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    ) { uri ->
-        val f = excel
-        if (uri != null && f != null) {
-            runCatching {
-                ctx.contentResolver.openOutputStream(uri)!!.use { out -> f.inputStream().use { it.copyTo(out) } }
-            }.onSuccess { aviso("Excel guardado") }
-                .onFailure { aviso("No se pudo guardar el Excel") }
+    fun generar(tipo: String, crear: () -> File) {
+        generando = true
+        scope.launch {
+            val r = runCatching { withContext(Dispatchers.IO) { crear() } }
+            generando = false
+            r.onSuccess { exportado = Exportado(it, if (tipo == "PDF") MIME_PDF else MIME_XLSX, tipo) }
+                .onFailure { aviso("No se pudo generar el $tipo") }
         }
     }
 
@@ -192,8 +183,11 @@ fun App(db: Db) {
             onQuitarLogo = { Logo.quitar(ctx); logo = Logo.cargar(ctx); aviso("Logo quitado") },
             onExportar = { exportarCopia.launch("respaldo_concreto_${T.hoy()}.json") },
             onImportar = { importarCopia.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
-            onImportarExcel = { importarExcel.launch(null) },
-            onExportarExcel = { elegirOrigenExcel = true }
+            onHistorialExcel = {
+                val todas = db.jornadas()
+                if (todas.none { it.mixers.isNotEmpty() }) aviso("Todavía no hay mixers registrados para exportar")
+                else generar("Excel") { Excel.historial(ctx, todas) }
+            }
         )
     } else {
         BackHandler { detalleId = null }
@@ -203,21 +197,9 @@ fun App(db: Db) {
             onEditar = { formJ = FormJ(actual) },
             onAgregar = { formM = FormM(actual, null) },
             onMixer = { formM = FormM(actual, it) },
-            onPdf = {
-                generando = true
-                scope.launch {
-                    val r = runCatching { withContext(Dispatchers.IO) { Pdf.generar(ctx, actual, logo) } }
-                    generando = false
-                    r.onSuccess { pdf = it }.onFailure { aviso("No se pudo generar el PDF") }
-                }
-            },
-            onExcel = {
-                scope.launch {
-                    val r = runCatching { withContext(Dispatchers.IO) { Excel.generarJornada(ctx, actual) } }
-                    r.onSuccess { excel = it }
-                        .onFailure { aviso("No se pudo generar el Excel") }
-                }
-            }
+            onCamara = { m -> if (Fotos.existe(ctx, m.id)) verFotoId = m.id else abrirCamara(m.id) },
+            versionFotos = versionFotos,
+            onExportar = { elegirFormato = actual }
         )
     }
 
@@ -248,6 +230,7 @@ fun App(db: Db) {
                     "Se borrará la jornada del ${T.fechaCorta(j.fecha)} con sus ${j.mixers.size} mixers. Esta acción no se puede deshacer.",
                     "Eliminar"
                 ) {
+                    j.mixers.forEach { Fotos.eliminar(ctx, it.id) }
                     db.eliminarJornada(j.id); version++
                     formJ = null; detalleId = null
                     aviso("Jornada eliminada")
@@ -273,6 +256,7 @@ fun App(db: Db) {
                     "Se borrará el mixer ${m.codigo.ifBlank { m.orden.toString() }} de esta jornada. Los demás conservarán su orden.",
                     "Eliminar"
                 ) {
+                    Fotos.eliminar(ctx, m.id); versionFotos++
                     db.eliminarMixer(m); version++
                     formM = null
                     aviso("Mixer eliminado")
@@ -281,72 +265,93 @@ fun App(db: Db) {
         )
     }
 
-    pdf?.let { f ->
+    elegirFormato?.let { j ->
         AlertDialog(
-            onDismissRequest = { pdf = null },
-            title = { Text("PDF listo") },
+            onDismissRequest = { elegirFormato = null },
+            title = { Text("Exportar jornada") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(f.name)
+                    Text("¿En qué formato quieres exportar el resumen del ${T.fechaCorta(j.fecha)}?")
                     Button(
-                        onClick = { if (!abrirPdf(ctx, f)) aviso("No hay una app para ver PDF; usa Compartir") },
+                        onClick = { elegirFormato = null; generar("PDF") { Pdf.generar(ctx, j, logo) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
+                    ) { Text("PDF (planilla para imprimir y firmar)") }
+                    Button(
+                        onClick = { elegirFormato = null; generar("Excel") { Excel.jornada(ctx, j) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Cian)
+                    ) { Text("Excel (.xlsx)") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { elegirFormato = null }) { Text("Cancelar") } }
+        )
+    }
+
+    exportado?.let { e ->
+        AlertDialog(
+            onDismissRequest = { exportado = null },
+            title = { Text("${e.tipo} listo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(e.archivo.name)
+                    Button(
+                        onClick = { if (!abrir(ctx, e.archivo, e.mime)) aviso("No hay una app para abrir este archivo; usa Compartir") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
                     ) { Text("Abrir") }
-                    OutlinedButton(onClick = { compartirPdf(ctx, f) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Compartir (WhatsApp, correo…)")
-                    }
-                    OutlinedButton(onClick = { guardarPdf.launch(f.name) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Guardar en el teléfono")
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { pdf = null }) { Text("Cerrar") } }
-        )
-    }
-
-    if (elegirOrigenExcel) {
-        val fuentes = listOf(Excel.ORIGEN_LOCAL) + jornadas.map { it.origen }.filter { it != Excel.ORIGEN_LOCAL }.distinct().sorted()
-        AlertDialog(
-            onDismissRequest = { elegirOrigenExcel = false },
-            title = { Text("Exportar a Excel") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Selecciona qué registros quieres exportar:")
-                    OutlinedButton(onClick = { elegirOrigenExcel = false; exportarExcelOrigen(ctx, scope, jornadas, Excel.ORIGEN_LOCAL, { excel = it }, { aviso("No se pudo generar el Excel") }) }, modifier = Modifier.fillMaxWidth()) { Text("Mis datos") }
-                    fuentes.filter { it != Excel.ORIGEN_LOCAL }.forEach { fuente ->
-                        OutlinedButton(onClick = { elegirOrigenExcel = false; exportarExcelOrigen(ctx, scope, jornadas, fuente, { excel = it }, { aviso("No se pudo generar el Excel") }) }, modifier = Modifier.fillMaxWidth()) { Text(fuente) }
-                    }
-                    Button(onClick = { elegirOrigenExcel = false; exportarExcelOrigen(ctx, scope, jornadas, Excel.ORIGEN_TODOS, { excel = it }, { aviso("No se pudo generar el Excel") }) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)) { Text("Registro unificado — Todos") }
-                }
-            },
-            confirmButton = { TextButton(onClick = { elegirOrigenExcel = false }) { Text("Cancelar") } }
-        )
-    }
-
-    excel?.let { f ->
-        AlertDialog(
-            onDismissRequest = { excel = null },
-            title = { Text("Excel listo") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(f.name)
-                    OutlinedButton(
-                        onClick = { compartirExcel(ctx, f) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    OutlinedButton(onClick = { compartir(ctx, e.archivo, e.mime) }, modifier = Modifier.fillMaxWidth()) {
                         Text("Compartir (WhatsApp, correo…)")
                     }
                     OutlinedButton(
-                        onClick = { guardarExcel.launch(f.name) },
+                        onClick = { if (e.mime == MIME_PDF) guardarPdf.launch(e.archivo.name) else guardarXlsx.launch(e.archivo.name) },
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Guardar en el teléfono")
-                    }
+                    ) { Text("Guardar en el teléfono") }
                 }
             },
-            confirmButton = { TextButton(onClick = { excel = null }) { Text("Cerrar") } }
+            confirmButton = { TextButton(onClick = { exportado = null }) { Text("Cerrar") } }
         )
+    }
+
+    recorte?.let { (id, bmp) ->
+        PantallaRecorte(
+            original = bmp, procesando = procesando,
+            onCancelar = { recorte = null },
+            onRepetir = { recorte = null; abrirCamara(id) },
+            onGuardar = { b, esquinas ->
+                procesando = true
+                scope.launch {
+                    val r = runCatching {
+                        withContext(Dispatchers.Default) {
+                            val limpia = Escaner.filtroEscaneo(Escaner.enderezar(b, esquinas))
+                            Fotos.guardar(ctx, id, limpia)
+                        }
+                    }
+                    procesando = false; recorte = null; versionFotos++
+                    r.onSuccess { aviso("Remisión guardada") }.onFailure { aviso("No se pudo procesar la foto") }
+                }
+            }
+        )
+    }
+
+    verFotoId?.let { id ->
+        val m = jornadas.flatMap { it.mixers }.find { it.id == id }
+        val b = remember(id, versionFotos) { Fotos.cargar(ctx, id) }
+        if (m != null && b != null) {
+            VerFoto(
+                bmp = b, titulo = "Remisión ${m.codigo}",
+                onCerrar = { verFotoId = null },
+                onCamara = { abrirCamara(id) },
+                onGaleria = { abrirGaleria(id) },
+                onCompartir = { compartir(ctx, Fotos.archivo(ctx, id), "image/jpeg") },
+                onEliminar = {
+                    confirm = Confirmacion("Eliminar foto", "Se borrará la foto de la remisión ${m.codigo}.", "Eliminar") {
+                        Fotos.eliminar(ctx, id); versionFotos++; verFotoId = null
+                        aviso("Foto eliminada")
+                    }
+                }
+            )
+        }
     }
 
     confirm?.let { cf ->

@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -88,8 +92,7 @@ fun Inicio(
     onQuitarLogo: () -> Unit,
     onExportar: () -> Unit,
     onImportar: () -> Unit,
-    onImportarExcel: () -> Unit,
-    onExportarExcel: () -> Unit
+    onHistorialExcel: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     Scaffold(
@@ -113,9 +116,9 @@ fun Inicio(
                             )
                             if (logo != null) DropdownMenuItem(text = { Text("Quitar logo") }, onClick = { menu = false; onQuitarLogo() })
                             HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Exportar historial a Excel") }, onClick = { menu = false; onHistorialExcel() })
+                            HorizontalDivider()
                             DropdownMenuItem(text = { Text("Guardar copia de seguridad") }, onClick = { menu = false; onExportar() })
-                            DropdownMenuItem(text = { Text("Exportar a Excel") }, onClick = { menu = false; onExportarExcel() })
-                            DropdownMenuItem(text = { Text("Importar Excel de otra persona") }, onClick = { menu = false; onImportarExcel() })
                             DropdownMenuItem(text = { Text("Restaurar copia de seguridad") }, onClick = { menu = false; onImportar() })
                         }
                     }
@@ -209,9 +212,6 @@ private fun TarjetaJornada(j: Jornada, onClick: () -> Unit) {
                     "${j.mixers.size} ${if (j.mixers.size == 1) "mixer" else "mixers"}" + (if (meta.isNotEmpty()) ", " + meta.joinToString(", ") else ""),
                     fontSize = 14.sp, color = Color(0xFF56636C)
                 )
-                if (j.origen != Excel.ORIGEN_LOCAL) {
-                    Text("Origen: ${j.origen}", fontSize = 11.sp, color = AzulMedio, fontWeight = FontWeight.SemiBold)
-                }
             }
             Column(Modifier.padding(end = 14.dp), horizontalAlignment = Alignment.End) {
                 Text(T.fmt(T.volumen(j), 2), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = AzulOscuro)
@@ -241,8 +241,9 @@ fun Detalle(
     onEditar: () -> Unit,
     onAgregar: () -> Unit,
     onMixer: (Mixer) -> Unit,
-    onPdf: () -> Unit,
-    onExcel: () -> Unit
+    onCamara: (Mixer) -> Unit,
+    versionFotos: Int,
+    onExportar: () -> Unit
 ) {
     val r = remember(j) { resumen(j) }
     Scaffold(
@@ -262,30 +263,16 @@ fun Detalle(
         },
         bottomBar = {
             Surface(color = Color.White, shadowElevation = 8.dp) {
-                Column(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = onExportar, enabled = j.mixers.isNotEmpty() && !generando,
+                        modifier = Modifier.weight(1f).height(54.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = onPdf, enabled = j.mixers.isNotEmpty() && !generando,
-                            modifier = Modifier.weight(1f).height(50.dp)
-                        ) {
-                            if (generando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            else Text("Exportar PDF", fontWeight = FontWeight.SemiBold, color = AzulOscuro)
-                        }
-                        OutlinedButton(
-                            onClick = onExcel, enabled = !generando,
-                            modifier = Modifier.weight(1f).height(50.dp)
-                        ) {
-                            Text("Exportar Excel", fontWeight = FontWeight.SemiBold, color = AzulOscuro)
-                        }
+                        if (generando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Text("Exportar", fontWeight = FontWeight.SemiBold, color = AzulOscuro)
                     }
                     Button(
-                        onClick = onAgregar, modifier = Modifier.fillMaxWidth().height(54.dp),
+                        onClick = onAgregar, modifier = Modifier.weight(1f).height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
@@ -301,7 +288,7 @@ fun Detalle(
             item { DatosJornada(j, onEditar) }
             item { Estadisticas(r) }
             if (j.mixers.isEmpty()) item { Vacio("Ningún mixer registrado", "Toca \"Agregar mixer\" cuando llegue el primero.") }
-            itemsIndexed(j.mixers, key = { _, m -> m.id }) { i, m -> TarjetaMixer(i + 1, m) { onMixer(m) } }
+            itemsIndexed(j.mixers, key = { _, m -> m.id }) { i, m -> TarjetaMixer(i + 1, m, versionFotos, { onCamara(m) }) { onMixer(m) } }
         }
     }
 }
@@ -344,7 +331,7 @@ private fun Dato(valor: String, etiqueta: String, modifier: Modifier) {
 }
 
 @Composable
-private fun TarjetaMixer(n: Int, m: Mixer, onClick: () -> Unit) {
+private fun TarjetaMixer(n: Int, m: Mixer, versionFotos: Int, onCamara: () -> Unit, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -375,6 +362,29 @@ private fun TarjetaMixer(n: Int, m: Mixer, onClick: () -> Unit) {
                 Text(if (m.cant.isNotBlank()) T.fmt(T.num(m.cant), 2) else "–", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = AzulOscuro)
                 Text("m³", fontSize = 12.sp, color = Color(0xFF56636C))
             }
+            Spacer(Modifier.width(12.dp))
+            BotonRemision(m.id, versionFotos, onCamara)
+        }
+    }
+}
+
+/** Cuadro de la remisión: cámara si no hay foto, miniatura si ya se tomó. */
+@Composable
+private fun BotonRemision(id: String, versionFotos: Int, onClick: () -> Unit) {
+    val ctx = LocalContext.current
+    val mini = remember(id, versionFotos) { Fotos.miniatura(ctx, id)?.asImageBitmap() }
+    val forma = RoundedCornerShape(8.dp)
+    Box(
+        Modifier.size(48.dp).clip(forma)
+            .background(if (mini == null) Color(0xFFEEF3FA) else Color.White)
+            .border(1.dp, if (mini == null) AzulClaro else AzulOscuro, forma)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (mini != null) {
+            Image(mini, contentDescription = "Ver foto de la remisión", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(painterResource(R.drawable.ic_camara), contentDescription = "Tomar foto de la remisión", tint = AzulOscuro, modifier = Modifier.size(24.dp))
         }
     }
 }
