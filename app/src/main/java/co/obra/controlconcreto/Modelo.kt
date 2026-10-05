@@ -8,7 +8,8 @@ data class Jornada(
     val frente: String,
     val tramo: String,
     val creada: String,
-    val mixers: List<Mixer> = emptyList()
+    val mixers: List<Mixer> = emptyList(),
+    val origen: String = Excel.ORIGEN_LOCAL
 )
 
 data class Mixer(

@@ -164,7 +164,7 @@ object Respaldo {
             arr.put(
                 JSONObject().put("id", j.id).put("fecha", j.fecha).put("turno", j.turno)
                     .put("nombre", j.nombre).put("frente", j.frente).put("tramo", j.tramo)
-                    .put("creada", j.creada).put("mixers", mx)
+                    .put("creada", j.creada).put("origen", j.origen).put("mixers", mx)
             )
         }
         return JSONObject().put("app", "control-concreto").put("version", 1).put("jornadas", arr).toString(1)
@@ -182,6 +182,7 @@ object Respaldo {
                 id = id, fecha = o.getString("fecha"), turno = o.txt("turno").ifBlank { "Día" },
                 nombre = o.txt("nombre"), frente = o.txt("frente"), tramo = o.txt("tramo"),
                 creada = o.txt("creada"),
+                origen = o.txt("origen").ifBlank { Excel.ORIGEN_LOCAL },
                 mixers = (0 until mx.length()).map { k ->
                     val m = mx.getJSONObject(k)
                     Mixer(

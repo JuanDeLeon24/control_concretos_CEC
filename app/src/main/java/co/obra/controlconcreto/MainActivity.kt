@@ -78,6 +78,22 @@ private fun compartirExcel(ctx: Context, f: File) {
     ctx.startActivity(Intent.createChooser(i, "Compartir Excel"))
 }
 
+private fun nombreCarpeta(ctx: Context, uri: android.net.Uri): String = runCatching {
+    ctx.contentResolver.query(uri, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use {
+        if (it.moveToFirst()) it.getString(0).orEmpty() else ""
+    } ?: ""
+}.getOrDefault("")
+
+private fun exportarExcelOrigen(
+    ctx: Context, scope: kotlinx.coroutines.CoroutineScope, jornadas: List<Jornada>, origen: String,
+    onListo: (File) -> Unit, onError: () -> Unit
+) {
+    scope.launch {
+        val r = runCatching { withContext(Dispatchers.IO) { Excel.generarOrigen(ctx, jornadas, origen) } }
+        r.onSuccess(onListo).onFailure { onError() }
+    }
+}
+
 @Composable
 fun App(db: Db) {
     val ctx = LocalContext.current
@@ -98,6 +114,7 @@ fun App(db: Db) {
     var pdf by remember { mutableStateOf<File?>(null) }
     var excel by remember { mutableStateOf<File?>(null) }
     var generando by remember { mutableStateOf(false) }
+    var elegirOrigenExcel by remember { mutableStateOf(false) }
 
     val elegirLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -134,6 +151,24 @@ fun App(db: Db) {
         }
     }
 
+    val importarExcel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val r = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val origen = nombreCarpeta(ctx, uri).ifBlank { "Importado" }
+                        Excel.importarCarpeta(ctx, uri, origen).also { db.importar(it) }
+                    }
+                }
+                r.onSuccess { lista ->
+                    version++
+                    val mixers = lista.sumOf { it.mixers.size }
+                    aviso("Importadas ${lista.size} jornadas y $mixers mixers como '${lista.firstOrNull()?.origen ?: "Importado"}'")
+                }.onFailure { aviso("No se pudo importar el Excel: ${it.message ?: "archivo no válido"}") }
+            }
+        }
+    }
+
     val guardarExcel = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     ) { uri ->
@@ -157,13 +192,8 @@ fun App(db: Db) {
             onQuitarLogo = { Logo.quitar(ctx); logo = Logo.cargar(ctx); aviso("Logo quitado") },
             onExportar = { exportarCopia.launch("respaldo_concreto_${T.hoy()}.json") },
             onImportar = { importarCopia.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
-            onExportarExcel = {
-                scope.launch {
-                    val r = runCatching { withContext(Dispatchers.IO) { Excel.generarHistorial(ctx, jornadas) } }
-                    r.onSuccess { excel = it }
-                        .onFailure { aviso("No se pudo generar el Excel") }
-                }
-            }
+            onImportarExcel = { importarExcel.launch(null) },
+            onExportarExcel = { elegirOrigenExcel = true }
         )
     } else {
         BackHandler { detalleId = null }
@@ -272,6 +302,25 @@ fun App(db: Db) {
                 }
             },
             confirmButton = { TextButton(onClick = { pdf = null }) { Text("Cerrar") } }
+        )
+    }
+
+    if (elegirOrigenExcel) {
+        val fuentes = listOf(Excel.ORIGEN_LOCAL) + jornadas.map { it.origen }.filter { it != Excel.ORIGEN_LOCAL }.distinct().sorted()
+        AlertDialog(
+            onDismissRequest = { elegirOrigenExcel = false },
+            title = { Text("Exportar a Excel") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Selecciona qué registros quieres exportar:")
+                    OutlinedButton(onClick = { elegirOrigenExcel = false; exportarExcelOrigen(ctx, scope, jornadas, Excel.ORIGEN_LOCAL, { excel = it }, { aviso("No se pudo generar el Excel") }) }, modifier = Modifier.fillMaxWidth()) { Text("Mis datos") }
+                    fuentes.filter { it != Excel.ORIGEN_LOCAL }.forEach { fuente ->
+                        OutlinedButton(onClick = { elegirOrigenExcel = false; exportarExcelOrigen(ctx, scope, jornadas, fuente, { excel = it }, { aviso("No se pudo generar el Excel") }) }, modifier = Modifier.fillMaxWidth()) { Text(fuente) }
+                    }
+                    Button(onClick = { elegirOrigenExcel = false; exportarExcelOrigen(ctx, scope, jornadas, Excel.ORIGEN_TODOS, { excel = it }, { aviso("No se pudo generar el Excel") }) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)) { Text("Registro unificado — Todos") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { elegirOrigenExcel = false }) { Text("Cancelar") } }
         )
     }
 

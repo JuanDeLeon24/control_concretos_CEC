@@ -41,3 +41,12 @@ y sale en la app y en el encabezado del PDF. También puedes poner `logo.png` en
 Los datos viven en el teléfono. Haz de vez en cuando: menú ⋮ > "Guardar copia de seguridad"
 (archivo .json) y guárdalo en otro lado. Para recuperarlos: "Restaurar copia de seguridad".
 Si desinstalas la app sin copia, los datos se pierden.
+
+## Importación y orígenes de Excel
+
+La app permite importar datos desde una carpeta del teléfono. El nombre de la carpeta se usa como origen de los registros importados (por ejemplo, `Aux. Omar Gelves`). Todos los `.xlsx` que estén directamente dentro de esa carpeta se leen y se consolidan.
+
+Desde **Exportar a Excel** se puede elegir:
+- **Mis datos**: solo jornadas creadas en este teléfono.
+- **Auxiliar**: solo registros importados con ese origen.
+- **Registro unificado — Todos**: combina los datos propios y todos los auxiliares.

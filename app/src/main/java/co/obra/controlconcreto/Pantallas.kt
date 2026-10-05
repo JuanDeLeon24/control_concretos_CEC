@@ -88,6 +88,7 @@ fun Inicio(
     onQuitarLogo: () -> Unit,
     onExportar: () -> Unit,
     onImportar: () -> Unit,
+    onImportarExcel: () -> Unit,
     onExportarExcel: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -113,7 +114,8 @@ fun Inicio(
                             if (logo != null) DropdownMenuItem(text = { Text("Quitar logo") }, onClick = { menu = false; onQuitarLogo() })
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("Guardar copia de seguridad") }, onClick = { menu = false; onExportar() })
-                            DropdownMenuItem(text = { Text("Exportar historial a Excel") }, onClick = { menu = false; onExportarExcel() })
+                            DropdownMenuItem(text = { Text("Exportar a Excel") }, onClick = { menu = false; onExportarExcel() })
+                            DropdownMenuItem(text = { Text("Importar Excel de otra persona") }, onClick = { menu = false; onImportarExcel() })
                             DropdownMenuItem(text = { Text("Restaurar copia de seguridad") }, onClick = { menu = false; onImportar() })
                         }
                     }
@@ -207,6 +209,9 @@ private fun TarjetaJornada(j: Jornada, onClick: () -> Unit) {
                     "${j.mixers.size} ${if (j.mixers.size == 1) "mixer" else "mixers"}" + (if (meta.isNotEmpty()) ", " + meta.joinToString(", ") else ""),
                     fontSize = 14.sp, color = Color(0xFF56636C)
                 )
+                if (j.origen != Excel.ORIGEN_LOCAL) {
+                    Text("Origen: ${j.origen}", fontSize = 11.sp, color = AzulMedio, fontWeight = FontWeight.SemiBold)
+                }
             }
             Column(Modifier.padding(end = 14.dp), horizontalAlignment = Alignment.End) {
                 Text(T.fmt(T.volumen(j), 2), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = AzulOscuro)
