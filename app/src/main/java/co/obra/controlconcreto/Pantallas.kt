@@ -87,7 +87,8 @@ fun Inicio(
     onCambiarLogo: () -> Unit,
     onQuitarLogo: () -> Unit,
     onExportar: () -> Unit,
-    onImportar: () -> Unit
+    onImportar: () -> Unit,
+    onExportarExcel: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     Scaffold(
@@ -112,6 +113,7 @@ fun Inicio(
                             if (logo != null) DropdownMenuItem(text = { Text("Quitar logo") }, onClick = { menu = false; onQuitarLogo() })
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("Guardar copia de seguridad") }, onClick = { menu = false; onExportar() })
+                            DropdownMenuItem(text = { Text("Exportar historial a Excel") }, onClick = { menu = false; onExportarExcel() })
                             DropdownMenuItem(text = { Text("Restaurar copia de seguridad") }, onClick = { menu = false; onImportar() })
                         }
                     }
@@ -234,7 +236,8 @@ fun Detalle(
     onEditar: () -> Unit,
     onAgregar: () -> Unit,
     onMixer: (Mixer) -> Unit,
-    onPdf: () -> Unit
+    onPdf: () -> Unit,
+    onExcel: () -> Unit
 ) {
     val r = remember(j) { resumen(j) }
     Scaffold(
@@ -254,16 +257,30 @@ fun Detalle(
         },
         bottomBar = {
             Surface(color = Color.White, shadowElevation = 8.dp) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = onPdf, enabled = j.mixers.isNotEmpty() && !generando,
-                        modifier = Modifier.weight(1f).height(54.dp)
+                Column(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (generando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Text("Exportar PDF", fontWeight = FontWeight.SemiBold, color = AzulOscuro)
+                        OutlinedButton(
+                            onClick = onPdf, enabled = j.mixers.isNotEmpty() && !generando,
+                            modifier = Modifier.weight(1f).height(50.dp)
+                        ) {
+                            if (generando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            else Text("Exportar PDF", fontWeight = FontWeight.SemiBold, color = AzulOscuro)
+                        }
+                        OutlinedButton(
+                            onClick = onExcel, enabled = !generando,
+                            modifier = Modifier.weight(1f).height(50.dp)
+                        ) {
+                            Text("Exportar Excel", fontWeight = FontWeight.SemiBold, color = AzulOscuro)
+                        }
                     }
                     Button(
-                        onClick = onAgregar, modifier = Modifier.weight(1f).height(54.dp),
+                        onClick = onAgregar, modifier = Modifier.fillMaxWidth().height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)

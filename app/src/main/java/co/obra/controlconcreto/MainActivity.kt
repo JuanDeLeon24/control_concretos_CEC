@@ -70,6 +70,14 @@ private fun abrirPdf(ctx: Context, f: File): Boolean = try {
     true
 } catch (e: ActivityNotFoundException) { false }
 
+private fun compartirExcel(ctx: Context, f: File) {
+    val i = Intent(Intent.ACTION_SEND)
+        .setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .putExtra(Intent.EXTRA_STREAM, uriDe(ctx, f))
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    ctx.startActivity(Intent.createChooser(i, "Compartir Excel"))
+}
+
 @Composable
 fun App(db: Db) {
     val ctx = LocalContext.current
@@ -88,6 +96,7 @@ fun App(db: Db) {
     var formM by remember { mutableStateOf<FormM?>(null) }
     var confirm by remember { mutableStateOf<Confirmacion?>(null) }
     var pdf by remember { mutableStateOf<File?>(null) }
+    var excel by remember { mutableStateOf<File?>(null) }
     var generando by remember { mutableStateOf(false) }
 
     val elegirLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -125,6 +134,18 @@ fun App(db: Db) {
         }
     }
 
+    val guardarExcel = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    ) { uri ->
+        val f = excel
+        if (uri != null && f != null) {
+            runCatching {
+                ctx.contentResolver.openOutputStream(uri)!!.use { out -> f.inputStream().use { it.copyTo(out) } }
+            }.onSuccess { aviso("Excel guardado") }
+                .onFailure { aviso("No se pudo guardar el Excel") }
+        }
+    }
+
     val actual = detalleId?.let { id -> jornadas.find { it.id == id } }
 
     if (actual == null) {
@@ -135,7 +156,14 @@ fun App(db: Db) {
             onCambiarLogo = { elegirLogo.launch("image/*") },
             onQuitarLogo = { Logo.quitar(ctx); logo = Logo.cargar(ctx); aviso("Logo quitado") },
             onExportar = { exportarCopia.launch("respaldo_concreto_${T.hoy()}.json") },
-            onImportar = { importarCopia.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+            onImportar = { importarCopia.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+            onExportarExcel = {
+                scope.launch {
+                    val r = runCatching { withContext(Dispatchers.IO) { Excel.generarHistorial(ctx, jornadas) } }
+                    r.onSuccess { excel = it }
+                        .onFailure { aviso("No se pudo generar el Excel") }
+                }
+            }
         )
     } else {
         BackHandler { detalleId = null }
@@ -151,6 +179,13 @@ fun App(db: Db) {
                     val r = runCatching { withContext(Dispatchers.IO) { Pdf.generar(ctx, actual, logo) } }
                     generando = false
                     r.onSuccess { pdf = it }.onFailure { aviso("No se pudo generar el PDF") }
+                }
+            },
+            onExcel = {
+                scope.launch {
+                    val r = runCatching { withContext(Dispatchers.IO) { Excel.generarJornada(ctx, actual) } }
+                    r.onSuccess { excel = it }
+                        .onFailure { aviso("No se pudo generar el Excel") }
                 }
             }
         )
@@ -237,6 +272,31 @@ fun App(db: Db) {
                 }
             },
             confirmButton = { TextButton(onClick = { pdf = null }) { Text("Cerrar") } }
+        )
+    }
+
+    excel?.let { f ->
+        AlertDialog(
+            onDismissRequest = { excel = null },
+            title = { Text("Excel listo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(f.name)
+                    OutlinedButton(
+                        onClick = { compartirExcel(ctx, f) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Compartir (WhatsApp, correo…)")
+                    }
+                    OutlinedButton(
+                        onClick = { guardarExcel.launch(f.name) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Guardar en el teléfono")
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { excel = null }) { Text("Cerrar") } }
         )
     }
 

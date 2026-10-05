@@ -43,7 +43,33 @@ object T {
         return (m / 60) to (m % 60)
     }
 
-    fun num(s: String): Double? = s.trim().replace(',', '.').toDoubleOrNull()
+    /** Convierte números decimales y fracciones simples/mixed (ej. 1/4, 3 1/2) a Double. */
+    fun num(s: String): Double? {
+        val t = s.trim().replace(',', '.')
+        if (t.isBlank()) return null
+        t.toDoubleOrNull()?.let { return it }
+
+        val partes = t.split(Regex("\\s+"))
+        var total = 0.0
+        var encontro = false
+        for (parte in partes) {
+            if (!parte.contains("/")) {
+                val entero = parte.toDoubleOrNull() ?: return null
+                total += entero
+                encontro = true
+            } else {
+                val f = parte.split("/")
+                if (f.size != 2) return null
+                val n = f[0].toDoubleOrNull() ?: return null
+                val d = f[1].toDoubleOrNull() ?: return null
+                if (d == 0.0) return null
+                total += n / d
+                encontro = true
+            }
+        }
+        return if (encontro) total else null
+    }
+
     fun limpiar(s: String): String = s.trim().replace(',', '.')
 
     fun fmt(d: Double?, dec: Int = 1): String {

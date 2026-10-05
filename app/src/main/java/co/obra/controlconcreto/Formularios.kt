@@ -250,6 +250,18 @@ fun FormMixer(
     var errCodigo by remember { mutableStateOf(false) }
     var errNumero by remember { mutableStateOf<String?>(null) }
 
+    fun agregarFraccion(valor: String, setter: (String) -> Unit, actual: String) {
+        val base = actual.trim()
+        setter(
+            when {
+                base.isBlank() -> valor
+                base.matches(Regex("""[-+]?\d+(?:[.,]\d+)?""")) -> "$base $valor"
+                else -> "$base$valor"
+            }
+        )
+        errNumero = null
+    }
+
     val numero = if (m == null) j.mixers.size + 1 else j.mixers.indexOfFirst { it.id == m.id } + 1
 
     val avisos = buildList {
@@ -301,9 +313,34 @@ fun FormMixer(
             CampoNumero("Temperatura (°C)", temp, { temp = it; errNumero = null }, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CampoNumero("Asent. planta (\")", asP, { asP = it; errNumero = null }, Modifier.weight(1f))
-            CampoNumero("Asent. obra (\")", asO, { asO = it; errNumero = null }, Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                CampoNumero("Asent. planta (\")", asP, { asP = it; errNumero = null }, Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    listOf("1/4", "1/2", "3/4").forEach { fr ->
+                        SuggestionChip(
+                            onClick = { agregarFraccion(fr, { asP = it }, asP) },
+                            label = { Text(fr, fontSize = 11.sp) }
+                        )
+                    }
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                CampoNumero("Asent. obra (\")", asO, { asO = it; errNumero = null }, Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    listOf("1/4", "1/2", "3/4").forEach { fr ->
+                        SuggestionChip(
+                            onClick = { agregarFraccion(fr, { asO = it }, asO) },
+                            label = { Text(fr, fontSize = 11.sp) }
+                        )
+                    }
+                }
+            }
         }
+        Text(
+            "Puedes escribir el entero y luego tocar una fracción. Ej.: 3 + 1/4 → 3 1/4.",
+            fontSize = 11.sp, color = AzulMedio,
+            modifier = Modifier.padding(top = 4.dp)
+        )
         errNumero?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
 
         Seccion("Ubicación")
