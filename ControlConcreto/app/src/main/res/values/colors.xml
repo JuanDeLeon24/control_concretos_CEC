@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Manual de identidad corporativa: azul oscuro Pantone 289C / azul claro Pantone 283C -->
+    <color name="azul_oscuro">#002F5C</color>
+    <color name="azul_claro">#A0BEE7</color>
+    <color name="fondo">#F1F4F8</color>
+</resources>
