@@ -1,0 +1,3 @@
+Opcional: si pones aquí un archivo llamado logo.png (logo oficial entregado por
+Comunicaciones), la app lo traerá ya incluido. También se puede cargar desde la
+misma app: menú ⋮ > "Agregar logo de la empresa".
