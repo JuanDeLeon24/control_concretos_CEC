@@ -54,6 +54,21 @@ object Catalogo {
         val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IllegalArgumentException("No se pudo abrir el archivo")
         if (bytes.size < 4) throw IllegalArgumentException("El archivo está vacío")
+        val inicio = String(bytes, 0, minOf(bytes.size, 256), Charsets.ISO_8859_1)
+        if (inicio.contains("MSMAMARPCRYPT") || inicio.contains("AES/CBC"))
+            throw IllegalArgumentException(
+                "El archivo está cifrado por la protección de Microsoft (Intune) del teléfono de la empresa, " +
+                    "por eso no se puede leer. Pásalo al teléfono sin abrirlo en Outlook, Teams u OneDrive del trabajo " +
+                    "(por ejemplo por cable USB, Google Drive personal o WhatsApp) e inténtalo de nuevo"
+            )
+        val esZip = bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
+        if (!esZip && !(bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte())) {
+            // Un CSV es texto: si hay muchos caracteres de control, el archivo no es una plantilla válida
+            val muestra = bytes.take(2048)
+            val raros = muestra.count { val c = it.toInt() and 0xFF; c < 0x09 || (c in 0x0E..0x1F) }
+            if (raros > muestra.size / 50)
+                throw IllegalArgumentException("El archivo no es un Excel (.xlsx) ni un CSV válido, o está dañado o cifrado")
+        }
         val filas = when {
             bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte() -> leerXlsx(bytes)
             bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte() ->
