@@ -8,7 +8,8 @@ data class Jornada(
     val frente: String,
     val tramo: String,
     val creada: String,
-    val mixers: List<Mixer> = emptyList()
+    val mixers: List<Mixer> = emptyList(),
+    val usaCatalogo: Boolean = false   // true = frente/tramo/localización elegidos del catálogo cargado
 )
 
 data class Mixer(
@@ -25,6 +26,13 @@ data class Mixer(
     val temp: String,       // °C
     val loc: String,
     val obs: String
+)
+
+data class ItemCatalogo(
+    val frente: String,
+    val tramo: String,
+    val abscisa: String,
+    val modulo: String
 )
 
 data class Resumen(

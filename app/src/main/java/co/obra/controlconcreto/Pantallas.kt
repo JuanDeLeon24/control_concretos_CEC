@@ -92,7 +92,9 @@ fun Inicio(
     onQuitarLogo: () -> Unit,
     onExportar: () -> Unit,
     onImportar: () -> Unit,
-    onHistorialExcel: () -> Unit
+    onHistorialExcel: () -> Unit,
+    onCatalogo: () -> Unit,
+    onImportarJornada: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     Scaffold(
@@ -115,6 +117,9 @@ fun Inicio(
                                 onClick = { menu = false; onCambiarLogo() }
                             )
                             if (logo != null) DropdownMenuItem(text = { Text("Quitar logo") }, onClick = { menu = false; onQuitarLogo() })
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Catálogo de frentes y tramos") }, onClick = { menu = false; onCatalogo() })
+                            DropdownMenuItem(text = { Text("Importar jornada de otro teléfono") }, onClick = { menu = false; onImportarJornada() })
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text("Exportar historial a Excel") }, onClick = { menu = false; onHistorialExcel() })
                             HorizontalDivider()

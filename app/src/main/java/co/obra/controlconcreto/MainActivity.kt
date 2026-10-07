@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,6 +54,11 @@ data class FormM(val jornada: Jornada, val mixer: Mixer?)
 data class Exportado(val archivo: File, val mime: String, val tipo: String)
 const val MIME_PDF = "application/pdf"
 const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+const val MIME_CSV = "text/csv"
+const val MIME_ZIP = "application/zip"
+
+/** Jornada importada que choca con una existente: se espera la decisión del usuario. */
+data class Pendiente(val paquete: Paquete, val existente: Jornada)
 
 data class Confirmacion(val titulo: String, val texto: String, val accion: String, val alConfirmar: () -> Unit)
 
@@ -99,6 +105,15 @@ fun App(db: Db) {
     var recorte by remember { mutableStateOf<Pair<String, android.graphics.Bitmap>?>(null) }
     var procesando by remember { mutableStateOf(false) }
     var verFotoId by remember { mutableStateOf<String?>(null) }
+    var versionCat by remember { mutableIntStateOf(0) }
+    val catalogo = remember(versionCat) { db.catalogo() }
+    val elementosCat = remember(versionCat) { db.elementos() }
+    var verCatalogo by remember { mutableStateOf(false) }
+    var msgCatalogo by remember { mutableStateOf<String?>(null) }
+    var cargandoCat by remember { mutableStateOf(false) }
+    var pendiente by remember { mutableStateOf<Pendiente?>(null) }
+    var pedirAdmin by remember { mutableStateOf<Autorizacion?>(null) }
+    fun conAdmin(motivo: String, accion: () -> Unit) { pedirAdmin = Autorizacion(motivo, accion) }
 
     val tomarFoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val id = capturaId
@@ -150,25 +165,79 @@ fun App(db: Db) {
                 .onFailure { aviso("Ese archivo no es una copia válida de esta app") }
         }
     }
+    val cargarCatalogo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            cargandoCat = true; msgCatalogo = null
+            scope.launch {
+                val r = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val res = Catalogo.leer(ctx, uri)
+                        db.reemplazarCatalogo(res.items, res.elementos)
+                        res
+                    }
+                }
+                cargandoCat = false
+                r.onSuccess { res ->
+                    versionCat++
+                    msgCatalogo = "Catálogo cargado: ${res.items.size} lugares y ${res.elementos.size} elementos de vaciado." +
+                        (if (res.omitidas > 0) " Se omitieron ${res.omitidas} filas sin frente." else "")
+                }.onFailure { e ->
+                    msgCatalogo = e.message?.takeIf { it.isNotBlank() && e is IllegalArgumentException }
+                        ?: "No se pudo leer ese archivo. Usa la plantilla (Excel .xlsx o CSV)."
+                }
+            }
+        }
+    }
+
+    fun instalarJornada(p: Paquete, reemplazar: Jornada?, ambas: Boolean) {
+        scope.launch {
+            val r = runCatching { withContext(Dispatchers.IO) { Intercambio.instalar(ctx, db, p, reemplazar, ambas) } }
+            r.onSuccess { j ->
+                version++; versionFotos++
+                detalleId = j.id
+                aviso("Jornada importada: ${j.mixers.size} mixers y ${p.fotos.size} fotos")
+            }.onFailure { aviso("No se pudo importar la jornada") }
+        }
+    }
+
+    val importarJornada = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val r = runCatching { withContext(Dispatchers.IO) { Intercambio.leer(ctx, uri) } }
+            r.onSuccess { p ->
+                val choque = Intercambio.conflicto(db.jornadas(), p.jornada)
+                if (choque == null) instalarJornada(p, null, false)
+                else pendiente = Pendiente(p, choque)
+            }.onFailure { e ->
+                aviso(e.message?.takeIf { e is IllegalArgumentException } ?: "Ese archivo no es una jornada exportada desde esta app")
+            }
+        }
+    }
+
     fun copiarA(uri: android.net.Uri?) {
         val e = exportado
         if (uri != null && e != null) {
             runCatching {
                 ctx.contentResolver.openOutputStream(uri)!!.use { out -> e.archivo.inputStream().use { it.copyTo(out) } }
-            }.onSuccess { aviso("${e.tipo} guardado") }
+            }.onSuccess {
+                val txt = if (e.tipo == "Plantilla") "Plantilla guardada en el teléfono" else "${e.tipo} guardado"
+                aviso(txt)
+                if (verCatalogo) msgCatalogo = txt
+            }
                 .onFailure { aviso("No se pudo guardar el archivo") }
         }
     }
     val guardarPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(MIME_PDF)) { copiarA(it) }
     val guardarXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(MIME_XLSX)) { copiarA(it) }
+    val guardarCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(MIME_CSV)) { copiarA(it) }
+    val guardarZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(MIME_ZIP)) { copiarA(it) }
 
-    fun generar(tipo: String, crear: () -> File) {
+    fun generar(tipo: String, mime: String, crear: () -> File) {
         generando = true
         scope.launch {
             val r = runCatching { withContext(Dispatchers.IO) { crear() } }
             generando = false
-            r.onSuccess { exportado = Exportado(it, if (tipo == "PDF") MIME_PDF else MIME_XLSX, tipo) }
-                .onFailure { aviso("No se pudo generar el $tipo") }
+            r.onSuccess { exportado = Exportado(it, mime, tipo) }
+                .onFailure { aviso("No se pudo generar el archivo ($tipo)") }
         }
     }
 
@@ -182,12 +251,18 @@ fun App(db: Db) {
             onCambiarLogo = { elegirLogo.launch("image/*") },
             onQuitarLogo = { Logo.quitar(ctx); logo = Logo.cargar(ctx); aviso("Logo quitado") },
             onExportar = { exportarCopia.launch("respaldo_concreto_${T.hoy()}.json") },
-            onImportar = { importarCopia.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+            onImportar = {
+                conAdmin("restaurar una copia de seguridad") {
+                    importarCopia.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                }
+            },
             onHistorialExcel = {
                 val todas = db.jornadas()
                 if (todas.none { it.mixers.isNotEmpty() }) aviso("Todavía no hay mixers registrados para exportar")
-                else generar("Excel") { Excel.historial(ctx, todas) }
-            }
+                else generar("Excel", MIME_XLSX) { Excel.historial(ctx, todas) }
+            },
+            onCatalogo = { msgCatalogo = null; verCatalogo = true },
+            onImportarJornada = { conAdmin("importar una jornada") { importarJornada.launch(arrayOf("*/*")) } }
         )
     } else {
         BackHandler { detalleId = null }
@@ -207,6 +282,8 @@ fun App(db: Db) {
         FormJornada(
             j = f.jornada,
             ultimo = remember { Prefs.ultimo(ctx) },
+            catalogo = catalogo,
+            hayElementos = elementosCat.isNotEmpty(),
             onCerrar = { formJ = null },
             onGuardar = { nueva ->
                 val duplicada = if (f.jornada == null) jornadas.find {
@@ -242,6 +319,8 @@ fun App(db: Db) {
     formM?.let { f ->
         FormMixer(
             j = f.jornada, m = f.mixer, sugerencias = sugerencias,
+            lugares = if (f.jornada.usaCatalogo) Catalogo.lugares(catalogo, f.jornada.frente, f.jornada.tramo) else emptyList(),
+            elementos = if (f.jornada.usaCatalogo) elementosCat else emptyList(),
             onCerrar = { formM = null },
             onGuardar = { m ->
                 val final = if (f.mixer == null) m.copy(orden = db.siguienteOrden(f.jornada.id)) else m
@@ -273,18 +352,86 @@ fun App(db: Db) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("¿En qué formato quieres exportar el resumen del ${T.fechaCorta(j.fecha)}?")
                     Button(
-                        onClick = { elegirFormato = null; generar("PDF") { Pdf.generar(ctx, j, logo) } },
+                        onClick = { elegirFormato = null; generar("PDF", MIME_PDF) { Pdf.generar(ctx, j, logo) } },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
                     ) { Text("PDF (planilla para imprimir y firmar)") }
                     Button(
-                        onClick = { elegirFormato = null; generar("Excel") { Excel.jornada(ctx, j) } },
+                        onClick = { elegirFormato = null; generar("Excel", MIME_XLSX) { Excel.jornada(ctx, j) } },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Cian)
                     ) { Text("Excel (.xlsx)") }
+                    OutlinedButton(
+                        onClick = { elegirFormato = null; generar("Archivo de jornada", MIME_ZIP) { Intercambio.exportar(ctx, j) } },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Jornada completa con fotos (para otro teléfono)", color = AzulOscuro) }
                 }
             },
             confirmButton = { TextButton(onClick = { elegirFormato = null }) { Text("Cancelar") } }
+        )
+    }
+
+    if (verCatalogo) {
+        PantallaCatalogo(
+            catalogo = catalogo, elementos = elementosCat, mensaje = msgCatalogo, cargando = cargandoCat,
+            onCerrar = { verCatalogo = false },
+            onPlantillaExcel = {
+                runCatching { Catalogo.plantilla(ctx, true) }
+                    .onSuccess { exportado = Exportado(it, MIME_XLSX, "Plantilla") }
+                    .onFailure { msgCatalogo = "No se pudo preparar la plantilla" }
+            },
+            onPlantillaCsv = {
+                runCatching { Catalogo.plantilla(ctx, false) }
+                    .onSuccess { exportado = Exportado(it, MIME_CSV, "Plantilla") }
+                    .onFailure { msgCatalogo = "No se pudo preparar la plantilla" }
+            },
+            onCargar = { msgCatalogo = null; conAdmin("cargar el catálogo") { cargarCatalogo.launch(arrayOf("*/*")) } },
+            onEliminar = {
+                conAdmin("eliminar el catálogo") { confirm = Confirmacion(
+                    "Eliminar catálogo",
+                    "Se borrarán los ${catalogo.size} lugares y ${elementosCat.size} elementos cargados. Las jornadas ya registradas no se modifican. " +
+                        "Después podrás cargar un catálogo nuevo.",
+                    "Eliminar"
+                ) {
+                    db.borrarCatalogo(); versionCat++
+                    msgCatalogo = "Catálogo eliminado. Ya puedes cargar uno nuevo."
+                } }
+            }
+        )
+    }
+
+    pendiente?.let { pd ->
+        AlertDialog(
+            onDismissRequest = { pendiente = null },
+            title = { Text("Esta jornada ya existe") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Ya tienes la jornada del ${T.fechaCorta(pd.existente.fecha)}, turno ${pd.existente.turno.lowercase()}" +
+                            (if (pd.existente.frente.isNotBlank()) ", ${pd.existente.frente}" else "") +
+                            " (${pd.existente.mixers.size} mixers). La que llega trae ${pd.paquete.jornada.mixers.size} mixers " +
+                            "y ${pd.paquete.fotos.size} fotos. ¿Qué quieres hacer?"
+                    )
+                    Button(
+                        onClick = { pendiente = null; instalarJornada(pd.paquete, pd.existente, false) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
+                    ) { Text("Reemplazar la que ya tengo") }
+                    OutlinedButton(
+                        onClick = { pendiente = null; instalarJornada(pd.paquete, null, true) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Conservar las dos", color = AzulOscuro) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pendiente = null }) { Text("Cancelar") } }
+        )
+    }
+
+    pedirAdmin?.let { pa ->
+        DialogoAdmin(
+            motivo = pa.motivo,
+            onCancelar = { pedirAdmin = null },
+            onAutorizado = { pedirAdmin = null; pa.accion() }
         )
     }
 
@@ -295,7 +442,11 @@ fun App(db: Db) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(e.archivo.name)
-                    Button(
+                    if (e.mime == MIME_ZIP) Text(
+                        "Envíalo por WhatsApp o correo. En el otro teléfono: menú ⋮ → Importar jornada de otro teléfono.",
+                        fontSize = 13.sp
+                    )
+                    else Button(
                         onClick = { if (!abrir(ctx, e.archivo, e.mime)) aviso("No hay una app para abrir este archivo; usa Compartir") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
@@ -304,7 +455,14 @@ fun App(db: Db) {
                         Text("Compartir (WhatsApp, correo…)")
                     }
                     OutlinedButton(
-                        onClick = { if (e.mime == MIME_PDF) guardarPdf.launch(e.archivo.name) else guardarXlsx.launch(e.archivo.name) },
+                        onClick = {
+                            when (e.mime) {
+                                MIME_PDF -> guardarPdf.launch(e.archivo.name)
+                                MIME_CSV -> guardarCsv.launch(e.archivo.name)
+                                MIME_ZIP -> guardarZip.launch(e.archivo.name)
+                                else -> guardarXlsx.launch(e.archivo.name)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Guardar en el teléfono") }
                 }

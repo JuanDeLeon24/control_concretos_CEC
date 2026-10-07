@@ -7,12 +7,12 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /** Base de datos SQLite dentro del teléfono. Cada cambio se guarda al instante. */
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 1) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE jornadas(id TEXT PRIMARY KEY, fecha TEXT NOT NULL, turno TEXT NOT NULL, " +
-                "nombre TEXT, frente TEXT, tramo TEXT, creada TEXT)"
+                "nombre TEXT, frente TEXT, tramo TEXT, creada TEXT, catalogo INTEGER DEFAULT 0)"
         )
         db.execSQL(
             "CREATE TABLE mixers(id TEXT PRIMARY KEY, jornada_id TEXT NOT NULL, orden INTEGER NOT NULL, " +
@@ -20,9 +20,24 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 1) {
                 "temp TEXT, loc TEXT, obs TEXT)"
         )
         db.execSQL("CREATE INDEX idx_mixers_jornada ON mixers(jornada_id)")
+        crearCatalogo(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    private fun crearCatalogo(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS catalogo(_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "frente TEXT NOT NULL, tramo TEXT, abscisa TEXT, modulo TEXT, orden INTEGER)"
+        )
+        db.execSQL("CREATE TABLE IF NOT EXISTS elementos(_id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, orden INTEGER)")
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // v1 -> v2: solo se agrega la tabla del catalogo. Jornadas y mixers quedan intactos.
+        if (oldVersion < 2) {
+            crearCatalogo(db)
+            db.execSQL("ALTER TABLE jornadas ADD COLUMN catalogo INTEGER DEFAULT 0")
+        }
+    }
 
     private fun Cursor.s(i: Int): String = getString(i) ?: ""
 
@@ -44,7 +59,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 1) {
         }
         val out = ArrayList<Jornada>()
         db.rawQuery(
-            "SELECT id, fecha, turno, nombre, frente, tramo, creada FROM jornadas " +
+            "SELECT id, fecha, turno, nombre, frente, tramo, creada, catalogo FROM jornadas " +
                 "ORDER BY fecha DESC, turno ASC, creada ASC", null
         ).use { c ->
             while (c.moveToNext()) {
@@ -52,7 +67,8 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 1) {
                 out.add(
                     Jornada(
                         id = id, fecha = c.s(1), turno = c.s(2), nombre = c.s(3), frente = c.s(4),
-                        tramo = c.s(5), creada = c.s(6), mixers = mix[id] ?: emptyList()
+                        tramo = c.s(5), creada = c.s(6), mixers = mix[id] ?: emptyList(),
+                        usaCatalogo = c.getInt(7) == 1
                     )
                 )
             }
@@ -63,6 +79,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 1) {
     private fun valores(j: Jornada) = ContentValues().apply {
         put("id", j.id); put("fecha", j.fecha); put("turno", j.turno); put("nombre", j.nombre)
         put("frente", j.frente); put("tramo", j.tramo); put("creada", j.creada)
+        put("catalogo", if (j.usaCatalogo) 1 else 0)
     }
 
     private fun valores(m: Mixer) = ContentValues().apply {
@@ -120,5 +137,55 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "concreto.db", null, 1) {
             }
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
+    }
+
+    // ---------- Catalogo de frentes y tramos ----------
+
+    fun catalogo(): List<ItemCatalogo> {
+        val out = ArrayList<ItemCatalogo>()
+        readableDatabase.rawQuery(
+            "SELECT frente, tramo, abscisa, modulo FROM catalogo ORDER BY orden, _id", null
+        ).use { c ->
+            while (c.moveToNext()) out.add(ItemCatalogo(c.s(0), c.s(1), c.s(2), c.s(3)))
+        }
+        return out
+    }
+
+    fun elementos(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT nombre FROM elementos ORDER BY orden, _id", null).use { c ->
+            while (c.moveToNext()) out.add(c.s(0))
+        }
+        return out
+    }
+
+    fun hayCatalogo(): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM catalogo LIMIT 1", null).use { it.moveToFirst() } ||
+            readableDatabase.rawQuery("SELECT 1 FROM elementos LIMIT 1", null).use { it.moveToFirst() }
+
+    /** Reemplaza TODO el catalogo por la lista nueva (borra lo anterior primero). */
+    fun reemplazarCatalogo(items: List<ItemCatalogo>, elementos: List<String>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("catalogo", null, null)
+            db.delete("elementos", null, null)
+            elementos.forEachIndexed { i, e ->
+                db.insert("elementos", null, ContentValues().apply { put("nombre", e); put("orden", i) })
+            }
+            items.forEachIndexed { i, it ->
+                val v = ContentValues().apply {
+                    put("frente", it.frente); put("tramo", it.tramo)
+                    put("abscisa", it.abscisa); put("modulo", it.modulo); put("orden", i)
+                }
+                db.insert("catalogo", null, v)
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun borrarCatalogo() {
+        writableDatabase.delete("catalogo", null, null)
+        writableDatabase.delete("elementos", null, null)
     }
 }

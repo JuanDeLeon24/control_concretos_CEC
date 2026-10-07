@@ -44,7 +44,41 @@ Las fotos salen como anexo al final del PDF de la jornada. Todo funciona sin int
 
 ## Actualizaciones
 Desde la versión 1.2 la app se firma con `app/condor.jks`. No borres ese archivo: con él, cada
-versión nueva se instala encima de la anterior sin perder datos.
+versión nueva se instala encima de la anterior sin perder datos. La 1.3 solo agrega tablas nuevas
+a la base de datos; las jornadas, mixers y fotos existentes se conservan.
+
+## Catálogo de frentes y tramos (versión 1.3)
+Menú ⋮ > "Catálogo de frentes y tramos".
+1. Descarga la **plantilla** (Excel o CSV). Columnas: Frente | Tramo | Abscisa | Ubicación (módulo) |
+   Elemento vaciado. La columna Elemento vaciado es una lista aparte: un elemento por fila.
+   Cada fila es un lugar de vaciado. Si varias filas seguidas son del mismo frente, puedes dejar
+   el Frente en blanco y la app repite el de arriba.
+2. **Cargar archivo**: acepta .xlsx y .csv (separado por ; o por ,).
+3. Al crear una jornada eliges **Lista cargada** (frente y tramo solo se escogen de la lista, y la
+   localización de cada mixer también; al final de la lista está "Otro..." para escribir un lugar
+   que no está en el catálogo) o **Escribir libre** (como siempre).
+4. Para cambiar el catálogo: **Eliminar catálogo cargado** y luego cargar el nuevo.
+   Las jornadas ya registradas nunca se modifican.
+Sin catálogo cargado la app funciona exactamente igual que antes.
+
+## Pasar una jornada completa a otro teléfono (versión 1.3)
+- En la jornada: Exportar > **Jornada completa con fotos**. Sale un archivo .zip con los datos,
+  todos los mixers y las fotos de las remisiones. Envíalo por WhatsApp o correo.
+- En el otro teléfono: menú ⋮ > **Importar jornada de otro teléfono** y eliges el archivo.
+- Si esa jornada ya existe (mismo identificador interno, o misma fecha, turno, frente y tramo),
+  la app pregunta: **Reemplazar la que ya tengo** o **Conservar las dos**.
+- No abras el .zip con otra app: se importa tal cual desde Control Concreto.
+
+## Elemento vaciado
+La lista de elementos (HD, HI, bóveda, placa, lo que necesites) se carga en la columna
+"Elemento vaciado" de la plantilla. En las jornadas con lista cargada, cada mixer muestra esos
+botones más "Otro..." (abre un recuadro para escribirlo). Queda junto a la localización
+(ej. "Módulo 15 – K0+180 · BV-HD") y así sale en el PDF y en el Excel.
+
+## Acceso de administrador
+Se pide usuario y contraseña de administrador para: cargar catálogo, eliminar catálogo,
+restaurar copia de seguridad e importar jornada. Descargar la plantilla es libre.
+La app no guarda el usuario ni la contraseña: los pide cada vez.
 
 ## Logo
 Menú ⋮ > "Agregar logo de la empresa" y eliges la imagen del logo oficial (PNG). Queda guardado

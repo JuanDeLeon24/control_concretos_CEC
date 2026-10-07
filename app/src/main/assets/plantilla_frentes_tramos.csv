@@ -1,0 +1,8 @@
+﻿Frente;Tramo;Abscisa;Ubicación (módulo);Elemento vaciado
+Túnel 0;Tramo 1;K0+000 a K0+012;Módulo 1;HD
+Túnel 0;Tramo 1;K0+012 a K0+024;Módulo 2;HI
+Túnel 0;Tramo 1;K0+024 a K0+036;Módulo 3;Ambos hastiales
+Túnel 0;Tramo 2;K0+036 a K0+048;Módulo 4;BV
+Túnel 0;Tramo 2;K0+048 a K0+060;Módulo 5;BV-HD
+Túnel 1;Tramo 1;K1+000 a K1+012;Módulo 1;BV-HI
+Túnel 1;Tramo 1;K1+012 a K1+024;Módulo 2;Revestimiento completo

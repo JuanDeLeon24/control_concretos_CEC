@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -134,6 +138,55 @@ private fun CampoHora(label: String, valor: String, onCambio: (String) -> Unit) 
     }
 }
 
+/** Campo que solo deja ELEGIR de una lista (no se puede escribir). Trae buscador si la lista es larga. */
+@Composable
+private fun CampoLista(
+    label: String,
+    valor: String,
+    opciones: List<String>,
+    onElegir: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    habilitado: Boolean = true
+) {
+    var abierto by remember { mutableStateOf(false) }
+    CampoSelector(label = label, valor = valor, onClick = { if (habilitado) abierto = true }, modifier = modifier)
+    if (abierto) {
+        var filtro by remember { mutableStateOf("") }
+        val visibles = if (filtro.isBlank()) opciones else opciones.filter { it.contains(filtro.trim(), ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { abierto = false },
+            title = { Text(label) },
+            text = {
+                Column {
+                    if (opciones.size > 8) OutlinedTextField(
+                        value = filtro, onValueChange = { filtro = it }, label = { Text("Buscar") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    )
+                    LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                        items(visibles) { op ->
+                            val sel = op == valor
+                            Text(
+                                op,
+                                fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                color = if (sel) AzulOscuro else Color.Unspecified,
+                                fontSize = 16.sp,
+                                modifier = Modifier.fillMaxWidth()
+                                    .clickable { onElegir(op); abierto = false }
+                                    .padding(vertical = 14.dp, horizontal = 4.dp)
+                            )
+                            HorizontalDivider()
+                        }
+                        if (visibles.isEmpty()) item {
+                            Text("Sin resultados", color = Color(0xFF56636C), modifier = Modifier.padding(12.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { abierto = false }) { Text("Cerrar") } }
+        )
+    }
+}
+
 @Composable
 private fun CampoNumero(label: String, valor: String, onCambio: (String) -> Unit, modifier: Modifier) {
     OutlinedTextField(
@@ -202,23 +255,46 @@ private fun BotonEliminar(texto: String, onClick: () -> Unit) {
 fun FormJornada(
     j: Jornada?,
     ultimo: Ultimo,
+    catalogo: List<ItemCatalogo>,
+    hayElementos: Boolean,
     onCerrar: () -> Unit,
     onGuardar: (Jornada) -> Unit,
     onEliminar: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val hayCatalogo = catalogo.isNotEmpty() || hayElementos
+    val frentesCat = remember(catalogo) { Catalogo.frentes(catalogo) }
+    // Nueva jornada con catálogo cargado: arranca en "Lista cargada". Jornadas viejas conservan su modo.
+    var usarLista by rememberSaveable { mutableStateOf(hayCatalogo && (j?.usaCatalogo ?: true)) }
     var nombre by rememberSaveable { mutableStateOf(j?.nombre ?: ultimo.nombre) }
-    var frente by rememberSaveable { mutableStateOf(j?.frente ?: ultimo.frente) }
-    var tramo by rememberSaveable { mutableStateOf(j?.tramo ?: ultimo.tramo) }
+    var frente by rememberSaveable {
+        mutableStateOf(
+            j?.frente ?: if (usarLista && frentesCat.isNotEmpty() && ultimo.frente !in frentesCat) "" else ultimo.frente
+        )
+    }
+    var tramo by rememberSaveable {
+        mutableStateOf(
+            j?.tramo ?: if (usarLista && frentesCat.isNotEmpty() && ultimo.tramo !in Catalogo.tramos(catalogo, frente)) "" else ultimo.tramo
+        )
+    }
     var fecha by rememberSaveable { mutableStateOf(j?.fecha ?: T.hoy()) }
     var turno by rememberSaveable { mutableStateOf(j?.turno ?: T.turnoActual()) }
+    var errLista by remember { mutableStateOf<String?>(null) }
+    val tramosCat = remember(catalogo, frente) { Catalogo.tramos(catalogo, frente) }
+    // Frente y tramo de la lista solo si el catálogo trae frentes (puede traer solo elementos)
+    val listaFrentes = usarLista && frentesCat.isNotEmpty()
 
     fun guardar() {
+        if (listaFrentes) {
+            if (frente !in frentesCat) { errLista = "Elige el frente de la lista"; return }
+            if (tramosCat.isNotEmpty() && tramo !in tramosCat) { errLista = "Elige el tramo de la lista"; return }
+        }
         onGuardar(
             Jornada(
                 id = j?.id ?: T.uid(), fecha = fecha, turno = turno,
                 nombre = nombre.trim(), frente = frente.trim(), tramo = tramo.trim(),
-                creada = j?.creada ?: T.marcaTiempo(), mixers = j?.mixers ?: emptyList()
+                creada = j?.creada ?: T.marcaTiempo(), mixers = j?.mixers ?: emptyList(),
+                usaCatalogo = usarLista
             )
         )
     }
@@ -229,11 +305,56 @@ fun FormJornada(
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
             modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
         )
-        OutlinedTextField(
-            value = frente, onValueChange = { frente = it }, label = { Text("Frente") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
-        )
+
+        if (hayCatalogo) {
+            Text("Frente y tramo", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+                listOf(true to "Lista cargada", false to "Escribir libre").forEach { (opcion, texto) ->
+                    val elegir = {
+                        if (opcion && !usarLista && frentesCat.isNotEmpty()) {
+                            if (frente !in frentesCat) { frente = ""; tramo = "" }
+                            else if (tramo !in Catalogo.tramos(catalogo, frente)) tramo = ""
+                        }
+                        usarLista = opcion; errLista = null
+                    }
+                    if (opcion == usarLista) Button(
+                        onClick = elegir, modifier = Modifier.weight(1f).height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
+                    ) { Text(texto) }
+                    else OutlinedButton(onClick = elegir, modifier = Modifier.weight(1f).height(48.dp)) { Text(texto, color = AzulOscuro) }
+                }
+            }
+        }
+
+        if (listaFrentes) {
+            CampoLista(
+                label = "Frente", valor = frente, opciones = frentesCat,
+                onElegir = { nuevo ->
+                    if (nuevo != frente) {
+                        frente = nuevo
+                        val ts = Catalogo.tramos(catalogo, nuevo)
+                        tramo = if (ts.size == 1) ts[0] else ""
+                    }
+                    errLista = null
+                },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            )
+            CampoLista(
+                label = if (frente.isNotBlank() && tramosCat.isEmpty()) "Tramo (este frente no tiene tramos)" else "Tramo",
+                valor = tramo, opciones = tramosCat,
+                onElegir = { tramo = it; errLista = null },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                habilitado = tramosCat.isNotEmpty()
+            )
+            errLista?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+        } else {
+            OutlinedTextField(
+                value = frente, onValueChange = { frente = it }, label = { Text("Frente") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            )
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
             CampoSelector(
                 label = "Fecha", valor = T.fechaCorta(fecha),
@@ -244,7 +365,7 @@ fun FormJornada(
                 },
                 modifier = Modifier.weight(1f)
             )
-            OutlinedTextField(
+            if (!listaFrentes) OutlinedTextField(
                 value = tramo, onValueChange = { tramo = it }, label = { Text("Tramo") }, singleLine = true,
                 modifier = Modifier.weight(1f)
             )
@@ -271,6 +392,8 @@ fun FormMixer(
     j: Jornada,
     m: Mixer?,
     sugerencias: List<String>,
+    lugares: List<String>,
+    elementos: List<String>,
     onCerrar: () -> Unit,
     onGuardar: (Mixer) -> Unit,
     onEliminar: () -> Unit
@@ -283,7 +406,24 @@ fun FormMixer(
     var temp by rememberSaveable { mutableStateOf(m?.temp ?: "") }
     var asP by rememberSaveable { mutableStateOf(m?.asPlanta ?: "") }
     var asO by rememberSaveable { mutableStateOf(m?.asObra ?: "") }
-    var loc by rememberSaveable { mutableStateOf(m?.loc ?: (j.mixers.lastOrNull()?.loc ?: "")) }
+    val locGuardada = m?.loc ?: (j.mixers.lastOrNull()?.loc ?: "")
+    // Solo se separa el elemento si la jornada trabaja con la lista de elementos cargada
+    val locInicial = remember { if (elementos.isNotEmpty()) Elementos.separar(locGuardada, elementos) else locGuardada to "" }
+    var loc by rememberSaveable { mutableStateOf(locInicial.first) }
+    // "Otro..." en la localización: el lugar no está en el catálogo y se escribe a mano
+    var locOtro by rememberSaveable {
+        mutableStateOf(lugares.isNotEmpty() && locInicial.first.isNotBlank() && locInicial.first !in lugares)
+    }
+    // Elemento vaciado: uno de la lista, "Otro..." (con texto propio) o vacío
+    var elem by rememberSaveable {
+        mutableStateOf(
+            if (locInicial.second.isNotEmpty() && locInicial.second !in elementos) Elementos.OTRO else locInicial.second
+        )
+    }
+    var elemOtro by rememberSaveable {
+        mutableStateOf(if (locInicial.second !in elementos) locInicial.second else "")
+    }
+    var errUbic by remember { mutableStateOf<String?>(null) }
     var obs by rememberSaveable { mutableStateOf(m?.obs ?: "") }
     var errCodigo by remember { mutableStateOf(false) }
     var errNumero by remember { mutableStateOf<String?>(null) }
@@ -304,12 +444,15 @@ fun FormMixer(
         if (codigo.isBlank()) { errCodigo = true; return }
         if (malo != null) { errNumero = "${malo.first} debe ser un número"; return }
         if (maloAs != null) { errNumero = "${maloAs.first}: escríbelo como 7, 7 1/4 o 7.25"; return }
+        if (locOtro && loc.isBlank()) { errUbic = "Escribe la localización (elegiste Otro...)"; return }
+        if (elem == Elementos.OTRO && elemOtro.isBlank()) { errUbic = "Escribe el elemento vaciado (elegiste Otro...)"; return }
+        val elemFinal = if (elem == Elementos.OTRO) elemOtro.trim() else elem
         onGuardar(
             Mixer(
                 id = m?.id ?: T.uid(), jornadaId = j.id, orden = m?.orden ?: 0,
                 codigo = codigo.trim(), llegada = llegada, inicio = inicio, fin = fin,
                 cant = T.limpiar(cant), asPlanta = T.normalizarPulg(asP), asObra = T.normalizarPulg(asO), temp = T.limpiar(temp),
-                loc = loc.trim(), obs = obs.trim()
+                loc = Elementos.juntar(loc, elemFinal), obs = obs.trim()
             )
         )
     }
@@ -346,17 +489,78 @@ fun FormMixer(
         errNumero?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
 
         Seccion("Ubicación")
-        OutlinedTextField(
-            value = loc, onValueChange = { loc = it },
-            label = { Text("Localización (módulo, abscisa, hastial…)") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        val opciones = sugerencias.filter { it != loc && (loc.isBlank() || it.contains(loc, ignoreCase = true)) }
-        if (opciones.isNotEmpty()) {
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                opciones.forEach { s -> SuggestionChip(onClick = { loc = s }, label = { Text(s) }) }
+        if (lugares.isNotEmpty()) {
+            // Jornada con catálogo: la localización solo se elige de la lista cargada
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                CampoLista(
+                    label = "Localización (de la lista)",
+                    valor = if (locOtro) Elementos.OTRO else loc,
+                    opciones = lugares + Elementos.OTRO,
+                    onElegir = { op ->
+                        if (op == Elementos.OTRO) { if (!locOtro) loc = ""; locOtro = true }
+                        else { loc = op; locOtro = false }
+                        errUbic = null
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                if (loc.isNotEmpty() || locOtro) IconButton(onClick = { loc = ""; locOtro = false }) {
+                    Icon(Icons.Default.Clear, contentDescription = "Quitar localización")
+                }
+            }
+            if (locOtro) OutlinedTextField(
+                value = loc, onValueChange = { loc = it; errUbic = null },
+                label = { Text("Otro lugar o actividad") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            Text(
+                "Lugares de ${j.frente}" + (if (j.tramo.isNotBlank()) ", ${j.tramo}" else "") + " según el catálogo cargado",
+                fontSize = 12.sp, color = AzulMedio, modifier = Modifier.padding(top = 4.dp)
+            )
+        } else {
+            OutlinedTextField(
+                value = loc, onValueChange = { loc = it },
+                label = { Text("Localización (módulo, abscisa, hastial…)") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            val opciones = sugerencias.filter { it != loc && (loc.isBlank() || it.contains(loc, ignoreCase = true)) }
+            if (opciones.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    opciones.forEach { s ->
+                        SuggestionChip(onClick = {
+                            val p = if (elementos.isNotEmpty()) Elementos.separar(s, elementos) else s to ""
+                            loc = p.first
+                            if (p.second.isNotEmpty()) elem = p.second
+                        }, label = { Text(s) })
+                    }
+                }
             }
         }
+        if (elementos.isNotEmpty()) {
+        Text("Elemento vaciado", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            (elementos + Elementos.OTRO).forEach { e ->
+                if (e == elem) Button(
+                    onClick = { elem = ""; errUbic = null }, contentPadding = PaddingValues(horizontal = 14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AzulOscuro)
+                ) { Text(e) }
+                else OutlinedButton(onClick = { elem = e; errUbic = null }, contentPadding = PaddingValues(horizontal = 14.dp)) {
+                    Text(e, color = AzulOscuro)
+                }
+            }
+        }
+        if (elem == Elementos.OTRO) OutlinedTextField(
+            value = elemOtro, onValueChange = { elemOtro = it; errUbic = null },
+            label = { Text("Otro elemento o actividad") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
+        Text(
+            "Lista del catálogo cargado. Toca de nuevo para quitarlo.",
+            fontSize = 12.sp, color = Color(0xFF56636C), modifier = Modifier.padding(top = 4.dp)
+        )
+        }
+        errUbic?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
         OutlinedTextField(
             value = obs, onValueChange = { obs = it }, label = { Text("Observación") }, minLines = 3,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),

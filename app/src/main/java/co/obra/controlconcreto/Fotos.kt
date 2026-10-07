@@ -43,6 +43,16 @@ object Fotos {
         FileOutputStream(archivoMini(ctx, id)).use { mini.compress(Bitmap.CompressFormat.JPEG, 85, it) }
     }
 
+    /** Guarda tal cual una foto que llega de otro teléfono (sin recomprimir) y genera su miniatura. */
+    fun guardarBytes(ctx: Context, id: String, bytes: ByteArray) {
+        val f = archivo(ctx, id)
+        f.writeBytes(bytes)
+        val b = decodificar(f.path, 480, 0) ?: return
+        val s = 240f / max(b.width, b.height)
+        val mini = Bitmap.createScaledBitmap(b, max(1, (b.width * s).toInt()), max(1, (b.height * s).toInt()), true)
+        FileOutputStream(archivoMini(ctx, id)).use { mini.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+    }
+
     /** Foto recién tomada con la cámara, con la orientación corregida. */
     fun cargarCaptura(ctx: Context): Bitmap? {
         val f = captura(ctx)

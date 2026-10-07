@@ -174,49 +174,51 @@ object Logo {
 
 /** Copia de seguridad en JSON (compatible con la versión web de la app). */
 object Respaldo {
-    fun aJson(lista: List<Jornada>): String {
-        val arr = JSONArray()
-        lista.forEach { j ->
-            val mx = JSONArray()
-            j.mixers.forEach { m ->
-                mx.put(
-                    JSONObject().put("id", m.id).put("codigo", m.codigo).put("llegada", m.llegada)
-                        .put("inicio", m.inicio).put("fin", m.fin).put("cant", m.cant)
-                        .put("asPlanta", m.asPlanta).put("asObra", m.asObra).put("temp", m.temp)
-                        .put("loc", m.loc).put("obs", m.obs)
-                )
-            }
-            arr.put(
-                JSONObject().put("id", j.id).put("fecha", j.fecha).put("turno", j.turno)
-                    .put("nombre", j.nombre).put("frente", j.frente).put("tramo", j.tramo)
-                    .put("creada", j.creada).put("mixers", mx)
+    fun jornadaAJson(j: Jornada): JSONObject {
+        val mx = JSONArray()
+        j.mixers.forEach { m ->
+            mx.put(
+                JSONObject().put("id", m.id).put("codigo", m.codigo).put("llegada", m.llegada)
+                    .put("inicio", m.inicio).put("fin", m.fin).put("cant", m.cant)
+                    .put("asPlanta", m.asPlanta).put("asObra", m.asObra).put("temp", m.temp)
+                    .put("loc", m.loc).put("obs", m.obs)
             )
         }
+        return JSONObject().put("id", j.id).put("fecha", j.fecha).put("turno", j.turno)
+            .put("nombre", j.nombre).put("frente", j.frente).put("tramo", j.tramo)
+            .put("creada", j.creada).put("usaCatalogo", j.usaCatalogo).put("mixers", mx)
+    }
+
+    fun aJson(lista: List<Jornada>): String {
+        val arr = JSONArray()
+        lista.forEach { arr.put(jornadaAJson(it)) }
         return JSONObject().put("app", "control-concreto").put("version", 1).put("jornadas", arr).toString(1)
     }
 
     private fun JSONObject.txt(k: String): String = if (isNull(k)) "" else optString(k, "")
 
+    fun jornadaDesdeJson(o: JSONObject): Jornada {
+        val id = o.getString("id")
+        val mx = o.optJSONArray("mixers") ?: JSONArray()
+        return Jornada(
+            id = id, fecha = o.getString("fecha"), turno = o.txt("turno").ifBlank { "Día" },
+            nombre = o.txt("nombre"), frente = o.txt("frente"), tramo = o.txt("tramo"),
+            creada = o.txt("creada"),
+            mixers = (0 until mx.length()).map { k ->
+                val m = mx.getJSONObject(k)
+                Mixer(
+                    id = m.txt("id").ifBlank { T.uid() }, jornadaId = id, orden = k + 1,
+                    codigo = m.txt("codigo"), llegada = m.txt("llegada"), inicio = m.txt("inicio"),
+                    fin = m.txt("fin"), cant = m.txt("cant"), asPlanta = m.txt("asPlanta"),
+                    asObra = m.txt("asObra"), temp = m.txt("temp"), loc = m.txt("loc"), obs = m.txt("obs")
+                )
+            },
+            usaCatalogo = o.optBoolean("usaCatalogo", false)
+        )
+    }
+
     fun desdeJson(texto: String): List<Jornada> {
         val arr = JSONObject(texto).getJSONArray("jornadas")
-        return (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            val id = o.getString("id")
-            val mx = o.optJSONArray("mixers") ?: JSONArray()
-            Jornada(
-                id = id, fecha = o.getString("fecha"), turno = o.txt("turno").ifBlank { "Día" },
-                nombre = o.txt("nombre"), frente = o.txt("frente"), tramo = o.txt("tramo"),
-                creada = o.txt("creada"),
-                mixers = (0 until mx.length()).map { k ->
-                    val m = mx.getJSONObject(k)
-                    Mixer(
-                        id = m.txt("id").ifBlank { T.uid() }, jornadaId = id, orden = k + 1,
-                        codigo = m.txt("codigo"), llegada = m.txt("llegada"), inicio = m.txt("inicio"),
-                        fin = m.txt("fin"), cant = m.txt("cant"), asPlanta = m.txt("asPlanta"),
-                        asObra = m.txt("asObra"), temp = m.txt("temp"), loc = m.txt("loc"), obs = m.txt("obs")
-                    )
-                }
-            )
-        }
+        return (0 until arr.length()).map { i -> jornadaDesdeJson(arr.getJSONObject(i)) }
     }
 }
