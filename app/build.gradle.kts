@@ -88,4 +88,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    // Los iconos Clear, Delete, Edit, MoreVert y Share requieren el catálogo extendido.
+    implementation("androidx.compose.material:material-icons-extended")
+    // Dependencia explícita para Dispatchers, launch y withContext.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
