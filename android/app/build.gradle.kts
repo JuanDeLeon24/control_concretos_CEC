@@ -29,7 +29,21 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
+    }
+
+    packagingOptions {
+        exclude("META-INF/proguard/androidx-*.pro")
+        exclude("META-INF/androidx.*.version")
+    }
+
+    lint {
+        disable.add("MissingDimensionBaselineProfileContentProvider")
     }
 }
 
