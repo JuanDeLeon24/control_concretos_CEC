@@ -87,8 +87,8 @@ class ExcelService {
       }
 
       try {
-        final fecha = _parseDateTime(row[2]?.value);
-        if (fecha != null) fechaActual = fecha;
+        final fecha = row[2]?.value;
+        if (fecha is DateTime) fechaActual = fecha;
 
         final turno = row[3]?.value?.toString() ?? 'Día';
         final pkIni = _parseDouble(row[4]?.value);
@@ -141,7 +141,7 @@ class ExcelService {
       if (actividad == null) continue;
 
       try {
-        final fecha = _parseDateTime(row[0]?.value);
+        final fecha = row[0]?.value;
         final turno = row[1]?.value?.toString() ?? 'Día';
         final frente = row[3]?.value?.toString() ?? '';
         final grupo = row[4]?.value?.toString() ?? '';
@@ -155,7 +155,7 @@ class ExcelService {
           id: '$i',
           nombre: actividad,
           estado: 'En ejecución',
-          fechaInicio: fecha,
+          fechaInicio: (fecha is DateTime || fecha == null) ? fecha as DateTime? : null,
           cantidadEjecutada: _parseDouble(dato1 ?? dato2),
           unidad: unidad,
           grupo: grupo,
@@ -185,36 +185,10 @@ class ExcelService {
     return avancePorModulo;
   }
 
-  DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-
-    dynamic rawValue = value;
-    if (rawValue is CellValue) {
-      rawValue = rawValue.value;
-    }
-
-    if (rawValue is DateTime) return rawValue;
-
-    if (rawValue is String) {
-      final text = rawValue.trim();
-      if (text.isEmpty) return null;
-
-      return DateTime.tryParse(text) ??
-          DateTime.tryParse(text.replaceAll('/', '-'));
-    }
-
-    return null;
-  }
-
   double _parseDouble(dynamic value) {
     if (value == null) return 0;
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.replaceAll(',', '.')) ?? 0;
-    if (value is CellValue) {
-      final raw = value.value;
-      if (raw is num) return raw.toDouble();
-      if (raw is String) return double.tryParse(raw.replaceAll(',', '.')) ?? 0;
-    }
     return 0;
   }
 }
