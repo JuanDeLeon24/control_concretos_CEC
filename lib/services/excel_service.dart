@@ -4,8 +4,6 @@ import '../models/tunnel_module.dart';
 import '../models/activity.dart';
 import '../models/daily_report.dart';
 
-/// Servicio para leer y procesar el archivo Excel de reporte diario
-/// Las hojas NUNCA cambian de nombre, solo se alimentan con más información
 class ExcelService {
   static const String HOJA_MATRIZ = 'Matriz cant.';
   static const String HOJA_AVANCES = 'Avances_Diarios';
@@ -15,7 +13,6 @@ class ExcelService {
   static const String HOJA_FORMATO_NOCHE = 'Formato Túnel_Noche';
   static const String HOJA_RESUMEN = 'Resumen';
 
-  /// Lee el archivo Excel y extrae los módulos del Túnel 0
   Future<List<TunnelModule>> leerModulosTunel0(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -25,7 +22,6 @@ class ExcelService {
     final bytes = await file.readAsBytes();
     final excel = Excel.decodeBytes(bytes);
 
-    // Leer módulos de viga base (hoja Módulos_VB)
     final modulos = <TunnelModule>[];
     final sheetModulos = excel.tables[HOJA_MODULOS];
     
@@ -41,18 +37,17 @@ class ExcelService {
           final longitud = _parseDouble(row[3]?.value);
 
           modulos.add(TunnelModule(
-            id: moduloNum is int ? moduloNum : int.tryParse(moduloNum.toString()) ?? i,
-            moduloNumber: moduloNum is int ? moduloNum : int.tryParse(moduloNum.toString()) ?? i,
+            id: (moduloNum as int?) ?? int.tryParse(moduloNum.toString()) ?? i,
+            moduloNumber: (moduloNum as int?) ?? int.tryParse(moduloNum.toString()) ?? i,
             abscisaInicial: abscisaIni,
             abscisaFinal: abscisaFin,
             longitud: longitud,
             galeria: 'Túnel 0',
             frente: 'Frente 1',
             estado: 'En ejecución',
-            avanceTotal: 0, // Se calcula desde avances
+            avanceTotal: 0,
           ));
         } catch (e) {
-          // Continuar con el siguiente módulo si hay error
           continue;
         }
       }
@@ -61,7 +56,6 @@ class ExcelService {
     return modulos;
   }
 
-  /// Lee los avances diarios desde la hoja Avances_Diarios
   Future<List<DailyReport>> leerAvancesDiarios(String filePath) async {
     final file = File(filePath);
     final bytes = await file.readAsBytes();
@@ -72,7 +66,6 @@ class ExcelService {
 
     if (sheet == null) return reportes;
 
-    // Procesar filas desde la fila 4 (índice 3)
     final actividades = <ReportActivity>[];
     DateTime? fechaActual;
 
@@ -82,7 +75,6 @@ class ExcelService {
       
       if (actividad == null) continue;
       if (actividad.startsWith('AVANCE') || actividad.startsWith('TÚNEL')) {
-        // Guardar reporte anterior si existe
         if (actividades.isNotEmpty && fechaActual != null) {
           reportes.add(DailyReport(
             fecha: fechaActual,
@@ -122,7 +114,6 @@ class ExcelService {
       }
     }
 
-    // Agregar último reporte
     if (actividades.isNotEmpty && fechaActual != null) {
       reportes.add(DailyReport(
         fecha: fechaActual,
@@ -134,7 +125,6 @@ class ExcelService {
     return reportes;
   }
 
-  /// Lee las actividades desde BD_Actividades
   Future<List<Activity>> leerActividades(String filePath) async {
     final file = File(filePath);
     final bytes = await file.readAsBytes();
@@ -165,7 +155,7 @@ class ExcelService {
           id: '$i',
           nombre: actividad,
           estado: 'En ejecución',
-          fechaInicio: fecha is DateTime ? fecha : null,
+          fechaInicio: (fecha is DateTime || fecha == null) ? fecha as DateTime? : null,
           cantidadEjecutada: _parseDouble(dato1 ?? dato2),
           unidad: unidad,
           grupo: grupo,
@@ -179,17 +169,15 @@ class ExcelService {
     return actividades;
   }
 
-  /// Calcula el avance de cada módulo basado en las actividades
   Map<int, double> calcularAvancePorModulo(List<Activity> actividades) {
     final avancePorModulo = <int, double>{};
 
-    for (final actividades in actividades) {
-      // Extraer números de módulo del nombre de la actividad
-      final match = RegExp(r'(\d+)(?::(\d+))?').firstMatch(actividades.nombre);
+    for (final actividad in actividades) {
+      final match = RegExp(r'(\d+)(?::(\d+))?').firstMatch(actividad.nombre);
       if (match != null) {
         final modulo = int.tryParse(match.group(1) ?? '');
         if (modulo != null) {
-          avancePorModulo[modulo] = (avancePorModulo[modulo] ?? 0) + actividades.avancePercent;
+          avancePorModulo[modulo] = (avancePorModulo[modulo] ?? 0) + actividad.avancePercent;
         }
       }
     }

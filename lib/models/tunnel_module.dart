@@ -9,7 +9,7 @@ class TunnelModule {
   final String frente;
   final String estado;
   final double avanceTotal;
-  final List<Activity> activities;
+  final List<dynamic> activities;
   final DateTime? fechaInicio;
   final DateTime? fechaFin;
   final String? responsable;

@@ -1,4 +1,3 @@
-/// Modelo de datos para una actividad constructiva
 class Activity {
   final String id;
   final String nombre;

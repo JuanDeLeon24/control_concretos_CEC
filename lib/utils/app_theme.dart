@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Colores principales
   static const Color primaryColor = Color(0xFF1E3A5F);
   static const Color secondaryColor = Color(0xFF2E7D32);
   static const Color accentColor = Color(0xFFFF6F00);
@@ -9,13 +8,12 @@ class AppTheme {
   static const Color surfaceColor = Color(0xFF161B22);
   static const Color cardColor = Color(0xFF21262D);
 
-  // Colores de avance
-  static const Color colorNoIniciado = Color(0xFF9E9E9E); // Gris
-  static const Color colorRetrasado = Color(0xFFE53935); // Rojo
-  static const Color colorEnEjecucion = Color(0xFFFF9800); // Naranja
-  static const Color colorAvanzado = Color(0xFFFDD835); // Amarillo
-  static const Color colorCasiTerminado = Color(0xFF1E88E5); // Azul
-  static const Color colorTerminado = Color(0xFF43A047); // Verde
+  static const Color colorNoIniciado = Color(0xFF9E9E9E);
+  static const Color colorRetrasado = Color(0xFFE53935);
+  static const Color colorEnEjecucion = Color(0xFFFF9800);
+  static const Color colorAvanzado = Color(0xFFFDD835);
+  static const Color colorCasiTerminado = Color(0xFF1E88E5);
+  static const Color colorTerminado = Color(0xFF43A047);
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -43,12 +41,12 @@ class AppTheme {
           color: Colors.white,
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarTheme(
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: surfaceColor,
         selectedItemColor: accentColor,
         unselectedItemColor: Colors.grey,
       ),
-      floatingActionButtonTheme: const FloatingActionButtonTheme(
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: accentColor,
         foregroundColor: Colors.white,
       ),

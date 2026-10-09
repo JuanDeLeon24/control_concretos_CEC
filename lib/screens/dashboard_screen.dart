@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/data_service.dart';
 import '../utils/app_theme.dart';
-import '../widgets/kpi_card.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 /// Dashboard Ejecutivo con KPIs del túnel
@@ -385,7 +384,7 @@ class KPICard extends StatelessWidget {
       color: AppTheme.cardColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: Border.all(color: color.withOpacity(0.3)),
+        side: BorderSide(color: color.withOpacity(0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
