@@ -207,34 +207,47 @@ class DataService {
     {'pkIni': 6183.97, 'pkFin': 6176.57},
   ];
 
-  /// Calcula los avances de cada módulo
+  /// Calcula los avances de cada módulo.
   void _calcularAvances() {
-    // Aquí se calcula el avance basado en las actividades
-    // Por ahora se usa un cálculo simplificado
-    for (var modulo in _modulos) {
-      // El avance se calcula basado en las actividades completadas
-      // Esto se actualiza cuando se lee el Excel
-    }
+    // Pendiente: implementar el cálculo real usando las actividades importadas.
   }
 
-  /// Calcula los KPIs del dashboard
+  /// Calcula los KPIs del dashboard.
   void _calcularKPIs() {
-    final modulosCompletados = _modulos.where((m) => m.avanceTotal >= 100).length;
-    final modulosEnEjecucion = _modulos.where((m) => m.avanceTotal > 0 && m.avanceTotal < 100).length;
-    final metrosEjecutados = _modulos.where((m) => m.avanceTotal >= 100).fold(0.0, (sum, m) => sum + m.longitud);
-    final metrosFaltantes = T0_LONGITUD_TOTAL - metrosEjecutados;
-
+    final modulosCompletados = _modulos
+        .where((modulo) => modulo.avanceTotal >= 100)
+        .length;
+  
+    final metrosEjecutados = _modulos
+        .where((modulo) => modulo.avanceTotal >= 100)
+        .fold<double>(
+          0.0,
+          (total, modulo) => total + modulo.longitud,
+        );
+  
+    final metrosFaltantes =
+        T0_LONGITUD_TOTAL - metrosEjecutados;
+  
+    final avanceTotal = _modulos.isEmpty
+        ? 0.0
+        : _modulos
+                .map((modulo) => modulo.avanceTotal)
+                .reduce((a, b) => a + b) /
+            _modulos.length;
+  
     _kpiData = KPIData(
-      avanceTotal: _modulos.isEmpty ? 0 : _modulos.map((m) => m.avanceTotal).reduce((a, b) => a + b) / _modulos.length,
+      avanceTotal: avanceTotal,
       metrosEjecutados: metrosEjecutados,
       metrosFaltantes: metrosFaltantes,
       modulosCompletados: modulosCompletados,
       modulosTotales: _modulos.length,
-      actividadesRetrasadas: _actividades.where((a) => a.isDelayed).length,
-      concretoVaciado: 477.0, // Dato del Excel: Concreto revestimiento
-      productividadSemanal: 15.5, // Cálculo basado en últimos 7 días
-      productividadMensual: 62.0, // Cálculo basado en últimos 30 días
-      velocidadAvance: 7.5, // m/día promedio
+      actividadesRetrasada: _actividades
+          .where((actividad) => actividad.isDelayed)
+          .length,
+      concretoVaciado: 477.0,
+      productividadSemanal: 15.5,
+      productividadMensual: 62.0,
+      velocidadAvance: 7.5,
     );
   }
 
