@@ -1,7 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+val isReleaseTask = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
 }
 
 android {
@@ -16,22 +28,49 @@ android {
         versionName = "1.2"
     }
 
-    // Firma fija: permite instalar actualizaciones encima sin desinstalar (no borrar condor.jks)
     signingConfigs {
-        create("condor") {
-            storeFile = file("condor.jks")
-            storePassword = "condor2026"
-            keyAlias = "condor"
-            keyPassword = "condor2026"
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                val storeFileValue = requireNotNull(keystoreProperties.getProperty("storeFile")) {
+                    "Missing storeFile in keystore.properties"
+                }
+                val storePasswordValue = requireNotNull(keystoreProperties.getProperty("storePassword")) {
+                    "Missing storePassword in keystore.properties"
+                }
+                val keyAliasValue = requireNotNull(keystoreProperties.getProperty("keyAlias")) {
+                    "Missing keyAlias in keystore.properties"
+                }
+                val keyPasswordValue = requireNotNull(keystoreProperties.getProperty("keyPassword")) {
+                    "Missing keyPassword in keystore.properties"
+                }
+
+                storeFile = rootProject.file(storeFileValue)
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+            }
+        } else if (isReleaseTask) {
+            throw GradleException(
+                "Release build requested but keystore.properties is missing. Add the file or provide GitHub Actions secrets."
+            )
         }
     }
 
     buildTypes {
-        release {
+        debug {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("condor")
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

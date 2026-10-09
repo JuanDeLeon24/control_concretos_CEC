@@ -16,8 +16,7 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control
+# VS Code
 .vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -41,10 +40,17 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Android Studio build artifacts
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Signing secrets
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pem
 
 # iOS/macOS
 **/ios/**/*.mode1v3
@@ -62,9 +68,8 @@ app.*.map.json
 **/ios/**/Icon???
 **/ios/**/Icon????
 **/ios/**/Icon?????
-**/ios/**/Icon??????
 **/ios/**/Icon?????? Lock.json
-**/ios/**/Icon?????????
+**/ios/**/Icon????????
 **/ios/**/.instruments
 **/ios/**/.iris_meter
 **/ios/**/.clang-format
