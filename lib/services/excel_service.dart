@@ -88,7 +88,7 @@ class ExcelService {
 
       try {
         final fecha = row[2]?.value;
-        if (fecha is DateTime) fechaActual = fecha;
+        if (fecha is DateTime) fechaActual = fecha as DateTime?;
 
         final turno = row[3]?.value?.toString() ?? 'Día';
         final pkIni = _parseDouble(row[4]?.value);
