@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Delete
+
 allprojects {
     repositories {
         google()
@@ -5,12 +7,17 @@ allprojects {
     }
 }
 
-rootProject.buildDir = file("../build")
+val rootBuildDirectory = rootProject.layout.buildDirectory
+    .dir("../build")
+    .get()
+
+rootProject.layout.buildDirectory.set(rootBuildDirectory)
+
 subprojects {
-    project.buildDir = file("${rootProject.buildDir}/${project.name}")
+    val subprojectBuildDirectory = rootBuildDirectory.dir(project.name)
+    project.layout.buildDirectory.set(subprojectBuildDirectory)
 }
 
-// Only apply evaluation dependency to app subproject, not to itself
 subprojects {
     if (project.name != "app") {
         project.evaluationDependsOn(":app")
@@ -18,5 +25,5 @@ subprojects {
 }
 
 tasks.register<Delete>("clean") {
-    delete(rootProject.buildDir)
+    delete(rootProject.layout.buildDirectory)
 }
