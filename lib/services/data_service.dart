@@ -226,14 +226,24 @@ class DataService {
         );
   
     final metrosFaltantes =
-        T0_LONGITUD_TOTAL - metrosEjecutados;
+        (T0_LONGITUD_TOTAL - metrosEjecutados).clamp(
+          0.0,
+          T0_LONGITUD_TOTAL,
+        );
   
     final avanceTotal = _modulos.isEmpty
         ? 0.0
         : _modulos
                 .map((modulo) => modulo.avanceTotal)
-                .reduce((a, b) => a + b) /
+                .fold<double>(
+                  0.0,
+                  (total, avance) => total + avance,
+                ) /
             _modulos.length;
+  
+    final actividadesRetrasadas = _actividades
+        .where((actividad) => actividad.isDelayed)
+        .length;
   
     _kpiData = KPIData(
       avanceTotal: avanceTotal,
@@ -241,13 +251,13 @@ class DataService {
       metrosFaltantes: metrosFaltantes,
       modulosCompletados: modulosCompletados,
       modulosTotales: _modulos.length,
-      actividadesRetrasada: _actividades
-          .where((actividad) => actividad.isDelayed)
-          .length,
+      actividadesRetrasadas: actividadesRetrasadas,
       concretoVaciado: 477.0,
       productividadSemanal: 15.5,
       productividadMensual: 62.0,
       velocidadAvance: 7.5,
+      avancePorFrente: getAvancePorFrente(),
+      avancePorGaleria: getAvancePorGaleria(),
     );
   }
 
