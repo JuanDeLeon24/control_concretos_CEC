@@ -10,17 +10,15 @@ de red, guarda todo en una base de datos interna del teléfono y genera el PDF e
 1. Crea una cuenta gratuita en github.com y un repositorio nuevo (privado si prefieres).
 2. Sube todo el contenido de esta carpeta (botón "Add file" > "Upload files"; arrastra las
    carpetas). Importante: incluir la carpeta oculta `.github`.
-3. Entra a la pestaña **Actions**. Se ejecuta "Compilar APK" (si no arranca, pulsa
-   "Run workflow"). Tarda unos 5 minutos.
-4. Al terminar, abre la ejecución y descarga **ControlConcreto-APK** (viene en .zip; adentro está
-   el .apk).
+3. Entra a la pestaña **Actions** y ejecuta **Compilar APK Control Concreto** con **Run workflow**. También compila automáticamente al subir cambios a `main` o `master`.
+4. Descarga **ControlConcreto-APK-debug** para probar. Si están configurados los cuatro secretos de firma, también aparecerá **ControlConcreto-APK-release**, firmado para actualizar instalaciones previas.
 5. Pasa el .apk al celular, ábrelo y acepta "Instalar apps de origen desconocido".
 
 ### Opción B – Con Android Studio en un computador
 1. Instala Android Studio (gratis).
-2. File > Open > selecciona esta carpeta. Espera que termine de sincronizar.
+2. File > Open > selecciona la carpeta raíz del proyecto (la que contiene `settings.gradle.kts` y `app/`, no `android/` ni `ControlConcreto/`). Espera que termine de sincronizar.
 3. Build > Build App Bundle(s) / APK(s) > Build APK(s).
-4. El archivo queda en `app/build/outputs/apk/`.
+4. Para depuración, el archivo queda en `app/build/outputs/apk/debug/app-debug.apk`. La compilación release requiere configurar `keystore.properties` con la llave original de firma.
 
 Solo se necesita internet para compilar (una vez). Después, el teléfono no lo necesita nunca.
 
@@ -43,9 +41,7 @@ Las fotos salen como anexo al final del PDF de la jornada. Todo funciona sin int
 (todos los mixers + resumen por jornada, con filtros).
 
 ## Actualizaciones
-Desde la versión 1.2 la app se firma con `app/condor.jks`. No borres ese archivo: con él, cada
-versión nueva se instala encima de la anterior sin perder datos. La 1.3 solo agrega tablas nuevas
-a la base de datos; las jornadas, mixers y fotos existentes se conservan.
+La llave `app/condor.jks` se conserva para versiones release compatibles con instalaciones anteriores. Un APK debug sirve para pruebas, pero no reemplaza una instalación firmada con la llave release. El flujo de GitHub compila debug sin secretos y compila release solo si encuentra configurados `ANDROID_KEYSTORE_BASE64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`.
 
 ## Catálogo de frentes y tramos (versión 1.3)
 Menú ⋮ > "Catálogo de frentes y tramos".
