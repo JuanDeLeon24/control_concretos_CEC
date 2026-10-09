@@ -340,4 +340,172 @@ class ExcelService {
     }
 
     if (mes < 1 || mes > 12 || dia < 1 || dia > 31) {
-      return null
+      return null;
+    }
+
+    final fecha = DateTime(anio, mes, dia);
+
+    if (fecha.year != anio ||
+        fecha.month != mes ||
+        fecha.day != dia) {
+      return null;
+    }
+
+    return fecha;
+  }
+
+  DateTime? _parseFechaSerialExcel(double serial) {
+    if (!serial.isFinite || serial <= 0) {
+      return null;
+    }
+
+    final dias = serial.floor();
+    final fraccionDia = serial - dias;
+
+    final fechaBase = DateTime(1899, 12, 30);
+    final milisegundos = Duration.millisecondsPerDay * fraccionDia;
+
+    return fechaBase
+        .add(Duration(days: dias))
+        .add(Duration(milliseconds: milisegundos.round()));
+  }
+
+  int? _parseInt(CellValue? value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is IntCellValue) {
+      return value.value;
+    }
+
+    if (value is DoubleCellValue) {
+      return value.value.toInt();
+    }
+
+    if (value is TextCellValue) {
+      final texto = value.value.toString().trim();
+
+      return int.tryParse(texto) ??
+          double.tryParse(
+            _normalizarNumero(texto),
+          )?.toInt();
+    }
+
+    return null;
+  }
+
+  double _parseDouble(CellValue? value) {
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is IntCellValue) {
+      return value.value.toDouble();
+    }
+
+    if (value is DoubleCellValue) {
+      return value.value;
+    }
+
+    if (value is TextCellValue) {
+      final texto = value.value.toString();
+
+      return double.tryParse(_normalizarNumero(texto)) ?? 0;
+    }
+
+    if (value is DateCellValue) {
+      return 0;
+    }
+
+    if (value is DateTimeCellValue) {
+      return 0;
+    }
+
+    return 0;
+  }
+
+  String _parseTexto(
+    CellValue? value, {
+    String valorPredeterminado = '',
+  }) {
+    if (value == null) {
+      return valorPredeterminado;
+    }
+
+    if (value is TextCellValue) {
+      final texto = value.value.toString().trim();
+      return texto.isEmpty ? valorPredeterminado : texto;
+    }
+
+    if (value is IntCellValue) {
+      return value.value.toString();
+    }
+
+    if (value is DoubleCellValue) {
+      final numero = value.value;
+
+      if (numero == numero.truncateToDouble()) {
+        return numero.toInt().toString();
+      }
+
+      return numero.toString();
+    }
+
+    if (value is BoolCellValue) {
+      return value.value.toString();
+    }
+
+    if (value is DateCellValue) {
+      return value.asDateTimeLocal().toIso8601String();
+    }
+
+    if (value is DateTimeCellValue) {
+      return value.asDateTimeLocal().toIso8601String();
+    }
+
+    if (value is FormulaCellValue) {
+      return value.formula;
+    }
+
+    return value.toString();
+  }
+
+  bool _esCeldaVacia(CellValue? value) {
+    if (value == null) {
+      return true;
+    }
+
+    if (value is TextCellValue) {
+      return value.value.toString().trim().isEmpty;
+    }
+
+    return false;
+  }
+
+  String _normalizarNumero(String value) {
+    var texto = value
+        .trim()
+        .replaceAll('\u00A0', '')
+        .replaceAll(' ', '');
+
+    if (texto.contains(',') && texto.contains('.')) {
+      final ultimaComa = texto.lastIndexOf(',');
+      final ultimoPunto = texto.lastIndexOf('.');
+
+      if (ultimaComa > ultimoPunto) {
+        texto = texto.replaceAll('.', '').replaceAll(',', '.');
+      } else {
+        texto = texto.replaceAll(',', '');
+      }
+
+      return texto;
+    }
+
+    if (texto.contains(',')) {
+      return texto.replaceAll(',', '.');
+    }
+
+    return texto;
+  }
+}
