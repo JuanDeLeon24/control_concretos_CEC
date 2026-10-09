@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "co.obra.controlconcreto"
-    compileSdk = 34
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
