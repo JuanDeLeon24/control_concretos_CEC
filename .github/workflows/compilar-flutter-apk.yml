@@ -3,55 +3,234 @@ name: Compilar Flutter APK
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Compilar APK release
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
-      
-      - name: Setup Android SDK (pre-installed)
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        shell: bash
         run: |
+          set -euo pipefail
+
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
           sdkmanager --version
-          yes | sdkmanager --licenses 2>/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>/dev/null || true
-      
+
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-      
+          flutter-version: "3.24.0"
+          channel: stable
+          cache: true
+
+      - name: Verificar entorno
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          java -version
+          flutter --version
+          flutter doctor -v
+
+          echo "Directorio actual:"
+          pwd
+
+      - name: Validar secretos de firma
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64"
+            exit 1
+          fi
+
+          if [ -z "${STORE_PASSWORD:-}" ]; then
+            echo "::error::Falta el secreto ANDROID_STORE_PASSWORD"
+            exit 1
+          fi
+
+          if [ -z "${KEY_ALIAS:-}" ]; then
+            echo "::error::Falta el secreto ANDROID_KEY_ALIAS"
+            exit 1
+          fi
+
+          if [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "::error::Falta el secreto ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+
+          echo "Los cuatro secretos de firma están disponibles."
+
+      - name: Crear archivos de firma Android
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p android/app
+
+          printf '%s' "$KEYSTORE_BASE64" \
+            | tr -d '\r\n ' \
+            | base64 --decode \
+            > android/app/control-concreto-release.jks
+
+          {
+            echo "storeFile=app/control-concreto-release.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/keystore.properties
+
+          if [ ! -s android/app/control-concreto-release.jks ]; then
+            echo "::error::No se pudo reconstruir el keystore."
+            exit 1
+          fi
+
+          if [ ! -s android/keystore.properties ]; then
+            echo "::error::No se pudo crear android/keystore.properties."
+            exit 1
+          fi
+
+          echo "Archivos de firma creados correctamente."
+
+      - name: Verificar keystore y alias
+        shell: bash
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+
+          keytool \
+            -list \
+            -keystore android/app/control-concreto-release.jks \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            > /dev/null
+
+          echo "Keystore válido."
+          echo "Alias localizado correctamente."
+
+      - name: Verificar configuración antes de compilar
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -s android/keystore.properties
+          test -s android/app/control-concreto-release.jks
+
+          echo "storeFile configurado:"
+          grep '^storeFile=' android/keystore.properties
+
+          echo "keyAlias configurado:"
+          grep '^keyAlias=' android/keystore.properties
+
+          echo "La configuración de firma está lista."
+
       - name: Get dependencies
+        shell: bash
         run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          set -euo pipefail
+
           flutter pub get
-      
-      - name: Build APK
+
+      - name: Analyze project
+        shell: bash
         run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-          flutter build apk --release
-      
+          flutter analyze
+        continue-on-error: true
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -s android/keystore.properties
+          test -s android/app/control-concreto-release.jks
+
+          flutter build apk --release --verbose
+
+      - name: Verificar APK generado
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+
+          if [ ! -s "$APK_PATH" ]; then
+            echo "::error::No se generó el APK esperado: $APK_PATH"
+            exit 1
+          fi
+
+          echo "APK generado correctamente:"
+          ls -lh "$APK_PATH"
+
+      - name: Verificar firma del APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::No se encontró apksigner."
+            exit 1
+          fi
+
+          "$APKSIGNER" verify \
+            --verbose \
+            --print-certs \
+            build/app/outputs/flutter-apk/app-release.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ControlConcreto-Flutter-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Eliminar archivos sensibles
+        if: always()
+        shell: bash
+        run: |
+          rm -f android/keystore.properties
+          rm -f android/app/control-concreto-release.jks
