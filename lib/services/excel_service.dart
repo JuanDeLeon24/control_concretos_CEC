@@ -1,8 +1,10 @@
 import 'dart:io';
+
 import 'package:excel/excel.dart';
-import '../models/tunnel_module.dart';
+
 import '../models/activity.dart';
 import '../models/daily_report.dart';
+import '../models/tunnel_module.dart';
 
 class ExcelService {
   static const String HOJA_MATRIZ = 'Matriz cant.';
@@ -15,6 +17,7 @@ class ExcelService {
 
   Future<List<TunnelModule>> leerModulosTunel0(String filePath) async {
     final file = File(filePath);
+
     if (!await file.exists()) {
       throw Exception('Archivo no encontrado: $filePath');
     }
@@ -24,30 +27,40 @@ class ExcelService {
 
     final modulos = <TunnelModule>[];
     final sheetModulos = excel.tables[HOJA_MODULOS];
-    
+
     if (sheetModulos != null) {
       for (int i = 4; i < sheetModulos.maxRows; i++) {
         final row = sheetModulos.rows[i];
         final moduloNum = row[0]?.value;
-        if (moduloNum == null) continue;
+
+        if (moduloNum == null) {
+          continue;
+        }
 
         try {
           final abscisaIni = _parseDouble(row[1]?.value);
           final abscisaFin = _parseDouble(row[2]?.value);
           final longitud = _parseDouble(row[3]?.value);
 
-          modulos.add(TunnelModule(
-            id: (moduloNum as int?) ?? int.tryParse(moduloNum.toString()) ?? i,
-            moduloNumber: (moduloNum as int?) ?? int.tryParse(moduloNum.toString()) ?? i,
-            abscisaInicial: abscisaIni,
-            abscisaFinal: abscisaFin,
-            longitud: longitud,
-            galeria: 'Túnel 0',
-            frente: 'Frente 1',
-            estado: 'En ejecución',
-            avanceTotal: 0,
-          ));
-        } catch (e) {
+          final numeroModulo =
+              (moduloNum as int?) ??
+              int.tryParse(moduloNum.toString()) ??
+              i;
+
+          modulos.add(
+            TunnelModule(
+              id: numeroModulo,
+              moduloNumber: numeroModulo,
+              abscisaInicial: abscisaIni,
+              abscisaFinal: abscisaFin,
+              longitud: longitud,
+              galeria: 'Túnel 0',
+              frente: 'Frente 1',
+              estado: 'En ejecución',
+              avanceTotal: 0,
+            ),
+          );
+        } catch (_) {
           continue;
         }
       }
@@ -56,15 +69,24 @@ class ExcelService {
     return modulos;
   }
 
-  Future<List<DailyReport>> leerAvancesDiarios(String filePath) async {
+  Future<List<DailyReport>> leerAvancesDiarios(
+    String filePath,
+  ) async {
     final file = File(filePath);
+
+    if (!await file.exists()) {
+      throw Exception('Archivo no encontrado: $filePath');
+    }
+
     final bytes = await file.readAsBytes();
     final excel = Excel.decodeBytes(bytes);
 
     final reportes = <DailyReport>[];
     final sheet = excel.tables[HOJA_AVANCES];
 
-    if (sheet == null) return reportes;
+    if (sheet == null) {
+      return reportes;
+    }
 
     final actividades = <ReportActivity>[];
     DateTime? fechaActual;
@@ -72,25 +94,35 @@ class ExcelService {
     for (int i = 3; i < sheet.maxRows; i++) {
       final row = sheet.rows[i];
       final actividad = row[0]?.value?.toString();
-      
-      if (actividad == null) continue;
-      if (actividad.startsWith('AVANCE') || actividad.startsWith('TÚNEL')) {
+
+      if (actividad == null || actividad.trim().isEmpty) {
+        continue;
+      }
+
+      if (actividad.startsWith('AVANCE') ||
+          actividad.startsWith('TÚNEL')) {
         if (actividades.isNotEmpty && fechaActual != null) {
-          reportes.add(DailyReport(
-            fecha: fechaActual,
-            turno: 'Día',
-            actividades: List.from(actividades),
-          ));
+          reportes.add(
+            DailyReport(
+              fecha: fechaActual,
+              turno: 'Día',
+              actividades: List<ReportActivity>.from(actividades),
+            ),
+          );
+
           actividades.clear();
         }
+
         continue;
       }
 
       try {
         final fecha = row[2]?.value;
-        if (fecha is DateTime) fechaActual = fecha as DateTime?;
 
-        final turno = row[3]?.value?.toString() ?? 'Día';
+        if (fecha is DateTime) {
+          fechaActual = fecha;
+        }
+
         final pkIni = _parseDouble(row[4]?.value);
         final pkFin = _parseDouble(row[5]?.value);
         final cantidad = _parseDouble(row[7]?.value);
@@ -98,28 +130,32 @@ class ExcelService {
         final avance = _parseDouble(row[10]?.value);
         final codigo = row[12]?.value?.toString() ?? '';
 
-        actividades.add(ReportActivity(
-          codigo: codigo,
-          nombre: actividad,
-          frente: 'TUNEL 0',
-          grupo: '',
-          pkInicial: pkIni,
-          pkFinal: pkFin,
-          cantidad: cantidad,
-          unidad: unidad,
-          avancePercent: avance,
-        ));
-      } catch (e) {
+        actividades.add(
+          ReportActivity(
+            codigo: codigo,
+            nombre: actividad,
+            frente: 'TUNEL 0',
+            grupo: '',
+            pkInicial: pkIni,
+            pkFinal: pkFin,
+            cantidad: cantidad,
+            unidad: unidad,
+            avancePercent: avance,
+          ),
+        );
+      } catch (_) {
         continue;
       }
     }
 
     if (actividades.isNotEmpty && fechaActual != null) {
-      reportes.add(DailyReport(
-        fecha: fechaActual,
-        turno: 'Día',
-        actividades: actividades,
-      ));
+      reportes.add(
+        DailyReport(
+          fecha: fechaActual,
+          turno: 'Día',
+          actividades: List<ReportActivity>.from(actividades),
+        ),
+      );
     }
 
     return reportes;
@@ -127,39 +163,56 @@ class ExcelService {
 
   Future<List<Activity>> leerActividades(String filePath) async {
     final file = File(filePath);
+
+    if (!await file.exists()) {
+      throw Exception('Archivo no encontrado: $filePath');
+    }
+
     final bytes = await file.readAsBytes();
     final excel = Excel.decodeBytes(bytes);
 
     final actividades = <Activity>[];
     final sheet = excel.tables[HOJA_ACTIVIDADES];
 
-    if (sheet == null) return actividades;
+    if (sheet == null) {
+      return actividades;
+    }
 
     for (int i = 5; i < sheet.maxRows; i++) {
       final row = sheet.rows[i];
       final actividad = row[2]?.value?.toString();
-      if (actividad == null) continue;
+
+      if (actividad == null || actividad.trim().isEmpty) {
+        continue;
+      }
 
       try {
         final fecha = row[0]?.value;
         final turno = row[1]?.value?.toString() ?? 'Día';
-        final frente = row[3]?.value?.toString() ?? '';
         final grupo = row[4]?.value?.toString() ?? '';
         final unidad = row[5]?.value?.toString() ?? '';
         final dato1 = row[9]?.value;
         final dato2 = row[11]?.value;
 
-        actividades.add(Activity(
-          id: '$i',
-          nombre: actividad,
-          estado: 'En ejecución',
-          fechaInicio: (fecha is DateTime || fecha == null) ? fecha as DateTime? : null,
-          cantidadEjecutada: _parseDouble(dato1 ?? dato2),
-          unidad: unidad,
-          grupo: grupo,
-          turno: turno,
-        ));
-      } catch (e) {
+        DateTime? fechaInicio;
+
+        if (fecha is DateTime) {
+          fechaInicio = fecha;
+        }
+
+        actividades.add(
+          Activity(
+            id: '$i',
+            nombre: actividad,
+            estado: 'En ejecución',
+            fechaInicio: fechaInicio,
+            cantidadEjecutada: _parseDouble(dato1 ?? dato2),
+            unidad: unidad,
+            grupo: grupo,
+            turno: turno,
+          ),
+        );
+      } catch (_) {
         continue;
       }
     }
@@ -167,26 +220,52 @@ class ExcelService {
     return actividades;
   }
 
-  Map<int, double> calcularAvancePorModulo(List<Activity> actividades) {
+  Map<int, double> calcularAvancePorModulo(
+    List<Activity> actividades,
+  ) {
     final avancePorModulo = <int, double>{};
 
     for (final actividad in actividades) {
-      final match = RegExp(r'(\d+)(?::(\d+))?').firstMatch(actividad.nombre);
-      if (match != null) {
-        final modulo = int.tryParse(match.group(1) ?? '');
-        if (modulo != null) {
-          avancePorModulo[modulo] = (avancePorModulo[modulo] ?? 0) + actividad.avancePercent;
-        }
+      final match = RegExp(
+        r'(\d+)(?::(\d+))?',
+      ).firstMatch(actividad.nombre);
+
+      if (match == null) {
+        continue;
       }
+
+      final modulo = int.tryParse(match.group(1) ?? '');
+
+      if (modulo == null) {
+        continue;
+      }
+
+      avancePorModulo[modulo] =
+          (avancePorModulo[modulo] ?? 0) +
+          actividad.avancePercent;
     }
 
     return avancePorModulo;
   }
 
   double _parseDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value.replaceAll(',', '.')) ?? 0;
-    return 0;
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      final valorNormalizado = value
+          .trim()
+          .replaceAll(' ', '')
+          .replaceAll(',', '.');
+
+      return double.tryParse(valorNormalizado) ?? 0;
+    }
+
+    return double.tryParse(value.toString().replaceAll(',', '.')) ?? 0;
   }
 }
