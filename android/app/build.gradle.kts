@@ -71,15 +71,21 @@ android {
             isMinifyEnabled = false
         }
 
-        release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+    release {
+        isMinifyEnabled = true
+        isShrinkResources = true
+    
+        signingConfig = signingConfigs.findByName("release")
+            ?: throw GradleException(
+                "Release signing configuration was not created. " +
+                    "Verify android/keystore.properties."
             )
-        }
+    
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro"
+        )
+    }
     }
 
     packaging {
