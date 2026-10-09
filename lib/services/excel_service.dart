@@ -146,8 +146,6 @@ class ExcelService {
         final frente = row[3]?.value?.toString() ?? '';
         final grupo = row[4]?.value?.toString() ?? '';
         final unidad = row[5]?.value?.toString() ?? '';
-        final pkIni = _parseDouble(row[6]?.value);
-        final pkFin = _parseDouble(row[7]?.value);
         final dato1 = row[9]?.value;
         final dato2 = row[11]?.value;
 
